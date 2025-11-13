@@ -1,0 +1,26 @@
+{
+  "name": "stock-whisperer-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "preview": "cd frontend && npm run preview",
+    "lint": "eslint .",
+    "smoke": "tsx scripts/smokeTest.ts",
+    "invoke": "tsx scripts/testInvoke.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.80.0",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.32.0",
+    "eslint": "^9.32.0",
+    "globals": "^15.15.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0"
+  }
+}

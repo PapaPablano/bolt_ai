@@ -1,0 +1,63 @@
+### Phased Development Plan for StockML Analytics (as of Nov 12, 2025)
+
+This document outlines a prioritized, phased approach to developing the StockML Analytics application, based on the initial to-do list.
+
+---
+
+### Phase 1: Core Watchlist Enhancements
+
+**Goal:** Build the foundational UI and state management for individual watchlists.
+
+-   **[ ] 1.1: Implement "Rename Watchlist" Functionality:**
+    -   **Why:** A quick win that adds a basic management feature.
+    -   **How:** Create a dialog or inline editing feature triggered by the "Rename" dropdown item. Update the name in `useWatchlistStore`.
+
+-   **[ ] 1.2: Create a Watchlist Detail View:**
+    -   **Why:** This is the container for all stock-related actions and is a prerequisite for Phase 2.
+    -   **How:** Make each watchlist card clickable, navigating to a new dynamic route like `/watchlists/:id`. This page will initially be a placeholder listing the symbols.
+
+---
+
+### Phase 2: Watchlist Stock Management
+
+**Goal:** Enable users to add and remove stocks from their watchlists.
+
+-   **[ ] 2.1: Implement "Add Stock to Watchlist":**
+    -   **Why:** Core functionality for making watchlists useful.
+    -   **How:** In the Watchlist Detail View, add a search input. Use `useStockSearch` for search and `useWatchlistStore.addSymbolToWatchlist` to update state.
+
+-   **[ ] 2.2: Implement "Remove Stock from Watchlist":**
+    -   **Why:** Completes the basic management loop for stocks.
+    -   **How:** In the Watchlist Detail View, add a "remove" button next to each stock. Call `useWatchlistStore.removeSymbolFromWatchlist`.
+
+---
+
+### Phase 3: Enhancing Data Display & Persistence
+
+**Goal:** Make the watchlists visually informative with real-time data and verify state persistence.
+
+-   **[ ] 3.1: Display Stock Data in Watchlist:**
+    -   **Why:** Transforms the watchlist from a simple list of symbols into a useful data dashboard.
+    -   **How:** Create a `CompactStockCard` component to display symbol, name, price, and daily change. Use the `useStockQuote` hook to fetch data for all visible stocks on the detail page.
+
+-   **[ ] 3.2: Verify Zustand State Persistence:**
+    -   **Why:** Ensures user data is not lost between sessions.
+    -   **How:** Test creating/deleting/renaming watchlists and adding/removing stocks, then refresh the browser to confirm the state is restored from `localStorage`.
+
+---
+
+### Phase 4: New Features & Backend Maintenance
+
+**Goal:** Expand the application with a dedicated stock detail page and ensure backend reliability.
+
+-   **[ ] 4.1: Create a Stock Detail Page:**
+    -   **Why:** Provides a comprehensive view for a single stock, which is a core part of any trading app.
+    -   **How:** Design a new page for a route like `/stock/:symbol`. It should integrate the `EnhancedPriceChart`, `MetricCard`s, `NewsWidget`, and technical indicator charts.
+
+-   **[ ] 4.2: Backend - Systematic Function Verification:**
+    -   **Why:** Guarantees all backend endpoints are stable and working as expected after recent refactors.
+    -   **How:** Create a `test_functions.sh` script with `curl` commands for each endpoint (`stock-intraday`, `stock-historical`, `stock-quote`, `stock-search`, `stock-stream`) to automate testing.
+
+-   **[ ] 4.3 (Ongoing): Backend - Resolve TypeScript URL Import Errors:**
+    -   **Why:** Improves developer experience (DX) by removing distracting editor errors.
+    -   **Note:** This is a low-priority, ongoing task. The current implementation with `deno.jsonc` and `import_map.json` is correct, but editor-level issues persist. We will revisit this if it becomes a blocker.

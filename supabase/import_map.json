@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "technicalindicators": "https://esm.sh/technicalindicators@3.0.2"
+  }
+}

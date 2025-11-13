@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test</title>
+  <style>
+    body { 
+      background: #0f172a; 
+      color: white; 
+      font-family: sans-serif;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Stock Whisperer Test Page</h1>
+  <div id="status">Loading...</div>
+  
+  <script type="module">
+    const status = document.getElementById('status');
+    
+    // Check environment variables
+    status.innerHTML = `
+      <p>Checking configuration...</p>
+      <p>Supabase URL: ${import.meta.env.VITE_SUPABASE_URL || 'MISSING'}</p>
+      <p>Has Anon Key: ${import.meta.env.VITE_SUPABASE_ANON_KEY ? 'YES' : 'NO'}</p>
+    `;
+    
+    // Try to load the app
+    setTimeout(() => {
+      window.location.href = '/';
+    }, 2000);
+  </script>
+</body>
+</html>
