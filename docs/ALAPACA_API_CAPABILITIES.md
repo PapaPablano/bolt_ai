@@ -151,17 +151,24 @@ The authentication flow is designed to be secure by keeping all secret credentia
 
 1.  **Store Alpaca Keys as Supabase Secrets**:
     ```bash
-    supabase secrets set APCA_API_KEY_ID="PKW7MRBG7GL4PINWOSIWCAUB5T"
-    supabase secrets set APCA_API_SECRET_KEY="CCcV4kQsJSXeUPbbJ21ic6e8bs1SA6RkcGzbeHisyxj9"
+    supabase secrets set ALPACA_KEY_ID="PKW7MRBG7GL4PINWOSIWCAUB5T"
+    supabase secrets set ALPACA_SECRET_KEY="CCcV4kQsJSXeUPbbJ21ic6e8bs1SA6RkcGzbeHisyxj9"
     ```
 
-2.  **Server-Side Functions Retrieve Keys**: The `resolveAlpacaCredentials` function within the shared `_shared/alpaca/client.ts` module reads these secrets from the environment variables inside the Supabase Edge Function.
+    **Note:** Edge Functions use `ALPACA_KEY_ID` and `ALPACA_SECRET_KEY` (not `APCA_API_KEY_ID`). The HTTP headers still use `APCA-API-KEY-ID` and `APCA-API-SECRET-KEY`.
+
+2.  **Server-Side Functions Retrieve Keys**: Edge Functions read these secrets from environment variables:
 
     ```typescript
-    // From: supabase/functions/_shared/alpaca/client.ts
-    export const resolveAlpacaCredentials = (): AlpacaCreds => {
-      const keyId = Deno.env.get('APCA_API_KEY_ID')
-      const secretKey = Deno.env.get('APCA_API_SECRET_KEY')
+    // Edge Functions use ALPACA_KEY_ID and ALPACA_SECRET_KEY
+    const keyId = Deno.env.get('ALPACA_KEY_ID')
+    const secretKey = Deno.env.get('ALPACA_SECRET_KEY')
+    
+    // Then use them in HTTP headers with APCA-API-KEY-ID format
+    headers: {
+      'APCA-API-KEY-ID': keyId,
+      'APCA-API-SECRET-KEY': secretKey,
+    }
       // ... error handling ...
       return { keyId, secretKey, paper: keyId.startsWith('P') }
     }

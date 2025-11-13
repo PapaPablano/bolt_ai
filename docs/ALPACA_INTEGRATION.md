@@ -39,13 +39,16 @@ Add these to your **Supabase project settings** under "Edge Functions" → "Mana
 
 ```bash
 # Alpaca API Credentials (Required)
-APCA_API_KEY_ID=your_alpaca_key_id
-APCA_API_SECRET_KEY=your_alpaca_secret_key
+# Note: Code uses ALPACA_KEY_ID (not APCA_API_KEY_ID) - shorter env var names
+ALPACA_KEY_ID=your_alpaca_key_id
+ALPACA_SECRET_KEY=your_alpaca_secret_key
 
 # Data Feed Selection (Optional)
 # Options: 'iex' (default, free) or 'sip' (paid, requires subscription)
 ALPACA_STOCK_FEED=iex
 ```
+
+**Important:** The Edge Functions use `ALPACA_KEY_ID` and `ALPACA_SECRET_KEY` (not `APCA_API_KEY_ID`). These are stored as Supabase secrets and automatically injected into Edge Functions as environment variables.
 
 ### Getting Alpaca Credentials
 

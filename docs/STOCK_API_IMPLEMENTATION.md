@@ -200,7 +200,9 @@ Check that `stock_cache` table exists and has proper structure.
 Ensure user is authenticated before accessing user-specific tables.
 
 ### API errors?
-Verify `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY` are set in Supabase Edge Functions secrets. Optionally configure `ALPACA_STOCK_FEED` (`iex` or `sip`).
+Verify `ALPACA_KEY_ID` and `ALPACA_SECRET_KEY` are set in Supabase Edge Functions secrets. Optionally configure `ALPACA_STOCK_FEED` (`iex` or `sip`).
+
+**Note:** Edge Functions use `ALPACA_KEY_ID` and `ALPACA_SECRET_KEY` (not `APCA_API_KEY_ID`). See [ENVIRONMENT_VARIABLES.md](./ENVIRONMENT_VARIABLES.md) for complete naming reference.
 
 ## Support
 

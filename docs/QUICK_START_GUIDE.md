@@ -19,10 +19,13 @@
 3. Add the following secrets:
 
 ```bash
-APCA_API_KEY_ID=your_alpaca_key_id_here
-APCA_API_SECRET_KEY=your_alpaca_secret_key_here
+# Note: Use ALPACA_KEY_ID (not APCA_API_KEY_ID) - this is what the code expects
+ALPACA_KEY_ID=your_alpaca_key_id_here
+ALPACA_SECRET_KEY=your_alpaca_secret_key_here
 ALPACA_STOCK_FEED=iex  # or 'sip' for premium data
 ```
+
+**Important:** Edge Functions use `ALPACA_KEY_ID` and `ALPACA_SECRET_KEY` as environment variable names.
 
 ### Step 2: Deploy Edge Functions
 
@@ -312,8 +315,8 @@ const { data: data1h } = useStockIntraday('AAPL', '1h', '5d');
 **Solution:**
 1. Verify credentials in Supabase Edge Functions secrets
 2. Check environment variable names are exact:
-   - `APCA_API_KEY_ID`
-   - `APCA_API_SECRET_KEY`
+   - `ALPACA_KEY_ID` (not `APCA_API_KEY_ID`)
+   - `ALPACA_SECRET_KEY` (not `APCA_API_SECRET_KEY`)
 3. Redeploy Edge Functions after adding secrets
 
 ### Issue: Real-time stream not connecting
