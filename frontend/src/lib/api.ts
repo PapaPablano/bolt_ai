@@ -41,3 +41,39 @@ export async function fetchHistoricalData(
   if (error) throw error;
   return data.bars || [];
 }
+
+export async function fetchSchwabQuotes(symbols: string[]): Promise<any[]> {
+  const { data, error } = await supabase.functions.invoke('schwab-quote', {
+    body: { symbols }
+  });
+
+  if (error) throw error;
+  return data.quotes || [];
+}
+
+export async function fetchSchwabHistoricalData(
+  symbol: string,
+  params: {
+    periodType?: string;
+    period?: number;
+    frequencyType?: string;
+    frequency?: number;
+    startDate?: number;
+    endDate?: number;
+  } = {}
+): Promise<BarData[]> {
+  const { data, error } = await supabase.functions.invoke('schwab-historical', {
+    body: { symbol, ...params }
+  });
+
+  if (error) throw error;
+
+  return (data.candles || []).map((candle: any) => ({
+    time: new Date(candle.datetime).toISOString(),
+    open: candle.open,
+    high: candle.high,
+    low: candle.low,
+    close: candle.close,
+    volume: candle.volume,
+  }));
+}
