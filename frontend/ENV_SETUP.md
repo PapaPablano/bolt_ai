@@ -13,12 +13,14 @@ cd frontend
 touch .env.local
 ```
 
-2. **Add the following content:**
+2. **Add the following content (NO quotes needed):**
 
 ```env
 VITE_SUPABASE_URL=https://iwwdxshzrxilpzehymeu.supabase.co
 VITE_SUPABASE_ANON_KEY=YOUR_ANON_KEY_HERE
 ```
+
+**Important:** Don't use quotes around the values - Vite will include them as part of the value.
 
 3. **Get your Anon Key from Supabase Dashboard:**
 
@@ -43,6 +45,25 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
 ```
 
 **Note:** The local key shown above is from your current Supabase CLI output.
+
+## Important: Where These Variables Go
+
+**These variables go in your LOCAL `.env.local` file, NOT in Supabase secrets!**
+
+### Two Different Places for Environment Variables:
+
+1. **Frontend Variables** (what you're setting up now):
+   - Location: `frontend/.env.local` (local file on your computer)
+   - Variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+   - Why `VITE_` prefix?: Vite only exposes variables with this prefix to your frontend code
+   - These are PUBLIC values (the anon key is meant to be public in the frontend)
+
+2. **Supabase Edge Function Secrets** (different thing):
+   - Location: Supabase Dashboard → Edge Functions → Secrets
+   - Variables: `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, etc.
+   - These are SECRET keys that stay on the server
+
+**You don't need to add anything to Supabase for these frontend variables!** Just create the `.env.local` file locally.
 
 ## Verify Setup
 
