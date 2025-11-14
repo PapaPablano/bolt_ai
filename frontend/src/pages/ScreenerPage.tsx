@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Filter, History, Loader2, RefreshCw, Rocket } from 'lucide-react';
 import { InternalLink, StockLink } from '../components/InternalLink';
 import { generatePageMetadata, updateMetaTags } from '../lib/seo';

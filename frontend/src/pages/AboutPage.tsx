@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Users } from 'lucide-react';
 import { InternalLink } from '../components/InternalLink';
-import { generatePageMetadata, updateMetaTags } from '../lib/seo';
+import { updateMetaTags } from '../lib/seo';
 
 export function AboutPage() {
   useEffect(() => {
