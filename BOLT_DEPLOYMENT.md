@@ -71,11 +71,15 @@ npm install -g supabase
 # Login to Supabase
 supabase login
 
-# Deploy all functions
+# Deploy core functions (required)
 supabase functions deploy stock-quote --project-ref your-project-ref
 supabase functions deploy stock-historical-v3 --project-ref your-project-ref
 supabase functions deploy stock-news --project-ref your-project-ref
 supabase functions deploy ml-signals --project-ref your-project-ref
+
+# Deploy Schwab functions (optional - if using Schwab API)
+supabase functions deploy schwab-auth-init --project-ref your-project-ref
+supabase functions deploy schwab-auth-exchange --project-ref your-project-ref
 supabase functions deploy schwab-quote --project-ref your-project-ref
 supabase functions deploy schwab-historical --project-ref your-project-ref
 ```
@@ -87,6 +91,8 @@ for func in */; do
   supabase functions deploy ${func%/} --project-ref your-project-ref
 done
 ```
+
+**Note**: The new `schwab-auth-init` and `schwab-auth-exchange` functions enable Schwab OAuth setup. See [SCHWAB_API_TROUBLESHOOTING.md](./SCHWAB_API_TROUBLESHOOTING.md) for details.
 
 ### Step 5: Install Dependencies & Run
 
