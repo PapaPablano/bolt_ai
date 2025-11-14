@@ -42,7 +42,12 @@ export async function fetchHistoricalData(
   return data.bars || [];
 }
 
-export async function fetchSchwabQuotes(symbols: string[]): Promise<any[]> {
+interface SchwabQuote {
+  symbol: string;
+  [key: string]: unknown;
+}
+
+export async function fetchSchwabQuotes(symbols: string[]): Promise<SchwabQuote[]> {
   const { data, error } = await supabase.functions.invoke('schwab-quote', {
     body: { symbols }
   });
@@ -68,7 +73,16 @@ export async function fetchSchwabHistoricalData(
 
   if (error) throw error;
 
-  return (data.candles || []).map((candle: any) => ({
+  interface SchwabCandle {
+    datetime: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+  }
+
+  return (data.candles || []).map((candle: SchwabCandle) => ({
     time: new Date(candle.datetime).toISOString(),
     open: candle.open,
     high: candle.high,
