@@ -1,28 +1,39 @@
-# Stock Whisperer – Backend & Data Services
+# Stock Whisperer – Full-Stack Trading Application
 
-This repository contains the backend-only portion of Stock Whisperer.  
-All browser-facing code has been removed so the project now focuses on:
+A powerful stock trading and analysis platform with real-time market data, interactive charts, and ML-powered insights.
 
-- Supabase Edge Functions for quotes, news, signals, and caching
-- Schwab API OAuth, REST, and streaming clients
-- Supabase persistence helpers and schema
-- Local TypeScript utilities and smoke-test scripts
+## 🚀 Quick Start
 
-If you are looking for the React dashboard or any Lovable-generated UI, use the original `stock-whisperer-ai-04` repo instead.
+```bash
+# Install all dependencies
+npm run install:all
+
+# Set up environment variables
+cp .env.example frontend/.env.local
+# Edit frontend/.env.local with your Supabase credentials
+
+# Run the development server
+npm run dev
+```
+
+Visit `http://localhost:5173` to see the app!
+
+**For Bolt.new deployment**, see [BOLT_DEPLOYMENT.md](./BOLT_DEPLOYMENT.md) for detailed instructions.
 
 ---
 
-## Repository Layout
+## 📁 Repository Layout
 
+- `frontend/` – React + Vite frontend application with trading UI
+  - `src/components/` – Trading charts, stock cards, news panels, and more
+  - `src/lib/` – API integrations and utility functions
+  - Fully responsive with dark mode and modern UI components
 - `supabase/` – Edge Functions, migrations, and project config (Deno)
-- `project/src/schwab-api/` – OAuth client, REST helpers, and WebSocket streamer
-- `project/src/supabase/` – Database helpers and SQL schema for market data tables
-- `project/src/config/` – Environment-driven configuration for Schwab integrations
-- `scripts/` – Node/TypeScript utilities for invoking and smoke-testing functions
+  - `functions/` – Serverless API endpoints for stock data
+  - `migrations/` – Database schema and setup SQL
+- `project/src/schwab-api/` – Schwab API OAuth client and streaming
+- `scripts/` – Testing utilities for Edge Functions
 - `docs/` – Architecture notes, API references, and integration guides
-- `insert_alpaca_debug.sh` – Helper to inject Alpaca env diagnostics into Edge Functions
-
-Front-end directories such as `src/`, `public/`, Vite config, Tailwind config, and UI components have been removed.
 
 ---
 
