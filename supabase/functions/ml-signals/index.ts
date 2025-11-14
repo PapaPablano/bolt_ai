@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from 'npm:@supabase/supabase-js@2.80.0';
 import { calculateRSI } from '../_shared/technicalIndicators.ts';
 
 const supabaseAdmin = createClient(
