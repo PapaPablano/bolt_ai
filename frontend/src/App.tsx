@@ -98,12 +98,14 @@ function App() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <BarChart3 className="w-8 h-8 text-blue-500" />
+              <BarChart3 className="w-8 h-8 text-blue-500" aria-hidden="true" />
               <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
                 Stock Whisperer
               </h1>
             </div>
-            <SearchBar onSelectSymbol={handleSymbolSelect} />
+            <nav role="navigation" aria-label="Main">
+              <SearchBar onSelectSymbol={handleSymbolSelect} />
+            </nav>
           </div>
         </div>
       </header>
@@ -172,9 +174,9 @@ function App() {
               )}
             </div>
 
-            <div id="news" className="lg:col-span-1">
+            <aside id="news" className="lg:col-span-1" role="complementary" aria-label="Stock news and updates">
               <NewsPanel symbol={selectedSymbol} />
-            </div>
+            </aside>
           </div>
 
           <PatternDetector data={chartData} />
