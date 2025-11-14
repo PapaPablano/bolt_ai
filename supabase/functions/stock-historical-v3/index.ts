@@ -2,7 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.80.0'
 // We are removing the Alpaca SDK and using native fetch instead.
 // import Alpaca from '@alpacahq/alpaca-trade-api'
 // import { type Bar } from '@alpacahq/alpaca-trade-api/dist/resources/datav2/entityv2.js'
-import { SMA, EMA, RSI } from 'technicalindicators'
+import { SMA, EMA, RSI } from 'npm:technicalindicators@3.1.0'
 
 // Define the Bar type manually, matching the Alpaca API v2 response
 interface Bar {

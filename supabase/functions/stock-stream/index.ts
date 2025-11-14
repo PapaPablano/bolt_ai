@@ -1,4 +1,3 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
 // Define the shape of the incoming trade data from the WebSocket
 interface AlpacaTrade {
@@ -35,7 +34,7 @@ const corsHeaders = {
  * - quotes: Whether to subscribe to quotes (default: false)
  * - bars: Whether to subscribe to bars (default: false)
  */
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
