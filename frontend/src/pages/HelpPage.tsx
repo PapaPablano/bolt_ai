@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
-import { BookOpen, HelpCircle } from 'lucide-react';
+import { BookOpen, HelpCircle, Compass } from 'lucide-react';
 import { InternalLink } from '../components/InternalLink';
 import { generatePageMetadata, updateMetaTags } from '../lib/seo';
+import { ROUTES } from '../lib/urlHelpers';
 
 const FAQS = [
   {
@@ -35,18 +36,18 @@ export function HelpPage() {
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <InternalLink
-          to="/FOCUS_MANAGEMENT_GUIDE"
+          to={ROUTES.helpFocusManagement()}
           className="p-6 border border-slate-800 rounded-2xl bg-slate-900/40 hover:border-blue-500 transition-colors"
         >
           <h3 className="text-lg font-semibold text-slate-100 mb-2">Focus Management</h3>
-          <p className="text-sm text-slate-400">Review keyboard handling, focus traps, and skip links implemented across the SPA.</p>
+          <p className="text-sm text-slate-400">Review keyboard handling, skip links, and SR announcements implemented across the SPA.</p>
         </InternalLink>
         <InternalLink
-          to="/ANCHOR_TEXT_GUIDE"
+          to={ROUTES.helpLinkingStrategy()}
           className="p-6 border border-slate-800 rounded-2xl bg-slate-900/40 hover:border-blue-500 transition-colors"
         >
           <h3 className="text-lg font-semibold text-slate-100 mb-2">Internal Linking Strategy</h3>
-          <p className="text-sm text-slate-400">Anchor text variations, structured data usage, and implementation checklists.</p>
+          <p className="text-sm text-slate-400">Anchor text variations, contextual linking recipes, and SEO guardrails.</p>
         </InternalLink>
       </section>
 
@@ -71,8 +72,25 @@ export function HelpPage() {
           Need deeper guidance?
         </div>
         <p className="text-sm text-slate-400">
-          Start with <InternalLink to="/IMPLEMENTATION_CHECKLIST" className="text-blue-400 hover:text-blue-300">implementation checklist</InternalLink> or reach out to support@stockwhisperer.app for escalations.
+          Start with the{' '}
+          <InternalLink to={ROUTES.helpGettingStarted()} className="text-blue-400 hover:text-blue-300">
+            getting started guide
+          </InternalLink>
+          {' '}or reach out to support@stockwhisperer.app for escalations.
         </p>
+      </section>
+
+      <section className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6" aria-labelledby="policy-links">
+        <div className="flex items-center gap-2 text-slate-100 font-semibold mb-3">
+          <Compass className="w-5 h-5 text-blue-400" aria-hidden="true" />
+          Policies & Site Map
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4 text-sm text-slate-300">
+          <InternalLink to={ROUTES.about()} className="hover:text-blue-300">About Stock Whisperer</InternalLink>
+          <InternalLink to={ROUTES.privacy()} className="hover:text-blue-300">Privacy Policy</InternalLink>
+          <InternalLink to={ROUTES.terms()} className="hover:text-blue-300">Terms of Service</InternalLink>
+          <InternalLink to={ROUTES.sitemap()} className="hover:text-blue-300">Browse full sitemap</InternalLink>
+        </div>
       </section>
     </div>
   );

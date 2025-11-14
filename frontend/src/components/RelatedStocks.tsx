@@ -1,5 +1,6 @@
 import { TrendingUp } from 'lucide-react';
 import { StockLink, InternalLink } from './InternalLink';
+import { ROUTES } from '../lib/urlHelpers';
 
 interface RelatedStock {
   symbol: string;
@@ -48,7 +49,12 @@ export function RelatedStocks({
               </StockLink>
               <div className="text-sm text-slate-400 mt-0.5">{stock.name}</div>
               {stock.sector && (
-                <div className="text-xs text-slate-500 mt-0.5">{stock.sector}</div>
+                <InternalLink
+                  to={ROUTES.sector(stock.sector)}
+                  className="text-xs text-slate-500 hover:text-blue-300 mt-0.5 inline-flex"
+                >
+                  {stock.sector}
+                </InternalLink>
               )}
             </div>
             {stock.change !== undefined && (
@@ -86,7 +92,7 @@ export function SectorStocks({ sector, stocks }: { sector: string; stocks: Relat
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-bold text-slate-100">{sector} Stocks</h2>
         <InternalLink
-          to={`/markets/sectors/${sector.toLowerCase().replace(/\s+/g, '-')}`}
+          to={ROUTES.sector(sector)}
           className="text-blue-400 hover:text-blue-300 text-sm font-medium"
         >
           View all {sector} stocks →

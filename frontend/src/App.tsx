@@ -8,7 +8,7 @@ import { PWAUpdateNotification } from './components/PWAUpdateNotification';
 import { SearchBar } from './components/SearchBar';
 import { BreadcrumbsWithSchema } from './components/Breadcrumbs';
 import { SiteFooter } from './components/SiteFooter';
-import { NavLink } from './components/InternalLink';
+import { NavLink, InternalLink } from './components/InternalLink';
 import { DashboardPage } from './pages/DashboardPage';
 import { WatchlistPage } from './pages/WatchlistPage';
 import { MarketsPage } from './pages/MarketsPage';
@@ -19,9 +19,14 @@ import { ScreenerPage } from './pages/ScreenerPage';
 import { AlertsPage } from './pages/AlertsPage';
 import { PortfolioPage } from './pages/PortfolioPage';
 import { HelpPage } from './pages/HelpPage';
+import { HelpGettingStartedPage } from './pages/help/GettingStartedPage';
+import { HelpIndicatorsPage } from './pages/help/IndicatorsGuidePage';
+import { HelpFocusManagementPage } from './pages/help/FocusManagementGuidePage';
+import { HelpInternalLinkingPage } from './pages/help/InternalLinkingGuidePage';
 import { AboutPage } from './pages/AboutPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { TermsPage } from './pages/TermsPage';
+import { SitemapPage } from './pages/SitemapPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { ROUTES } from './lib/urlHelpers';
 import { generateStructuredData } from './lib/seo';
@@ -133,9 +138,14 @@ function App() {
           <Route path={ROUTES.alerts()} element={<AlertsPage />} />
           <Route path={ROUTES.portfolio()} element={<PortfolioPage />} />
           <Route path={ROUTES.help()} element={<HelpPage />} />
+          <Route path={ROUTES.helpGettingStarted()} element={<HelpGettingStartedPage />} />
+          <Route path={ROUTES.helpIndicators()} element={<HelpIndicatorsPage />} />
+          <Route path={ROUTES.helpFocusManagement()} element={<HelpFocusManagementPage />} />
+          <Route path={ROUTES.helpLinkingStrategy()} element={<HelpInternalLinkingPage />} />
           <Route path={ROUTES.about()} element={<AboutPage />} />
           <Route path={ROUTES.privacy()} element={<PrivacyPage />} />
           <Route path={ROUTES.terms()} element={<TermsPage />} />
+          <Route path={ROUTES.sitemap()} element={<SitemapPage />} />
           <Route
             path="*"
             element={
@@ -148,7 +158,22 @@ function App() {
                   canonical: location.pathname,
                   noindex: true,
                 }}
-              />
+              >
+                <div className="grid gap-3 md:grid-cols-2" aria-label="Suggested destinations">
+                  <InternalLink to={ROUTES.sitemap()} className="text-blue-400 hover:text-blue-300">
+                    Browse the sitemap →
+                  </InternalLink>
+                  <InternalLink to={ROUTES.help()} className="text-blue-400 hover:text-blue-300">
+                    Visit the help center →
+                  </InternalLink>
+                  <InternalLink to={ROUTES.helpGettingStarted()} className="text-blue-400 hover:text-blue-300">
+                    Read the getting started guide →
+                  </InternalLink>
+                  <InternalLink to={ROUTES.markets()} className="text-blue-400 hover:text-blue-300">
+                    Check today&apos;s market overview →
+                  </InternalLink>
+                </div>
+              </PlaceholderPage>
             }
           />
         </Routes>

@@ -143,6 +143,36 @@ export function generatePageMetadata(page: string): SEOMetadata {
       description: 'Learn how to use Stock Whisperer with comprehensive guides, tutorials, and documentation. Get help with features and trading strategies.',
       keywords: ['help', 'documentation', 'trading guide', 'how to trade'],
       canonical: '/help'
+    },
+    'help-getting-started': {
+      title: 'Getting Started | Walkthrough & Environment Setup | Stock Whisperer',
+      description: 'Configure your environment, connect Supabase, and learn the fastest workflows for navigating Stock Whisperer.',
+      keywords: ['getting started', 'setup guide', 'stock whisperer onboarding'],
+      canonical: '/help/getting-started'
+    },
+    'help-indicators': {
+      title: 'Technical Indicators Guide | Stock Whisperer',
+      description: 'Understand RSI, MACD, KDJ, and on-chart overlays within Stock Whisperer along with tuning guidance.',
+      keywords: ['technical indicators', 'RSI', 'MACD', 'KDJ'],
+      canonical: '/help/indicators'
+    },
+    'help-focus-management': {
+      title: 'Focus Management & Accessibility | Stock Whisperer',
+      description: 'Review WCAG-aligned focus handling patterns, skip links, and accessible UI primitives used across the platform.',
+      keywords: ['focus management', 'accessibility', 'WCAG'],
+      canonical: '/help/focus-management'
+    },
+    'help-internal-linking': {
+      title: 'Internal Linking Strategy | Stock Whisperer',
+      description: 'Anchor text guidelines, contextual linking playbooks, and SEO considerations for Stock Whisperer content.',
+      keywords: ['internal linking', 'SEO anchors', 'site architecture'],
+      canonical: '/help/internal-linking'
+    },
+    sitemap: {
+      title: 'Sitemap | Stock Whisperer Site Structure',
+      description: 'Explore every public page, help resource, and market tool available on Stock Whisperer.',
+      keywords: ['sitemap', 'site navigation'],
+      canonical: '/sitemap'
     }
   };
 
@@ -181,9 +211,12 @@ export function generateSitemap(): string {
     { loc: '/help', priority: '0.6', changefreq: 'monthly' },
     { loc: '/help/getting-started', priority: '0.5', changefreq: 'monthly' },
     { loc: '/help/indicators', priority: '0.5', changefreq: 'monthly' },
+    { loc: '/help/focus-management', priority: '0.4', changefreq: 'quarterly' },
+    { loc: '/help/internal-linking', priority: '0.4', changefreq: 'quarterly' },
     { loc: '/about', priority: '0.4', changefreq: 'monthly' },
     { loc: '/privacy', priority: '0.3', changefreq: 'yearly' },
-    { loc: '/terms', priority: '0.3', changefreq: 'yearly' }
+    { loc: '/terms', priority: '0.3', changefreq: 'yearly' },
+    { loc: '/sitemap', priority: '0.2', changefreq: 'monthly' }
   ];
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>

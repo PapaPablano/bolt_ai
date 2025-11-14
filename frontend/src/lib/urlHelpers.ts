@@ -171,9 +171,11 @@ export const ROUTES = {
   help: () => '/help',
   helpGettingStarted: () => '/help/getting-started',
   helpIndicators: () => '/help/indicators',
+  helpFocusManagement: () => '/help/focus-management',
+  helpLinkingStrategy: () => '/help/internal-linking',
   helpIndicator: (name: string) => `/help/indicators/${slugify(name)}`,
   about: () => '/about',
   privacy: () => '/privacy',
   terms: () => '/terms',
-  sitemap: () => '/sitemap.xml'
+  sitemap: () => '/sitemap'
 } as const;

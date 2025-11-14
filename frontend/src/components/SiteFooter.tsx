@@ -1,5 +1,6 @@
 import { InternalLink } from './InternalLink';
 import { BarChart3, Github, Twitter, Mail } from 'lucide-react';
+import { ROUTES } from '../lib/urlHelpers';
 
 export function SiteFooter() {
   const currentYear = new Date().getFullYear();
@@ -134,7 +135,7 @@ export function SiteFooter() {
             <ul className="space-y-2" role="list">
               <li>
                 <InternalLink
-                  to="/help"
+                  to={ROUTES.help()}
                   className="text-slate-400 hover:text-slate-100 text-sm transition-colors"
                 >
                   Help Center
@@ -142,7 +143,7 @@ export function SiteFooter() {
               </li>
               <li>
                 <InternalLink
-                  to="/help/getting-started"
+                  to={ROUTES.helpGettingStarted()}
                   className="text-slate-400 hover:text-slate-100 text-sm transition-colors"
                 >
                   Getting Started
@@ -150,7 +151,7 @@ export function SiteFooter() {
               </li>
               <li>
                 <InternalLink
-                  to="/help/indicators"
+                  to={ROUTES.helpIndicators()}
                   className="text-slate-400 hover:text-slate-100 text-sm transition-colors"
                 >
                   Technical Indicators
@@ -158,7 +159,7 @@ export function SiteFooter() {
               </li>
               <li>
                 <InternalLink
-                  to="/about"
+                  to={ROUTES.about()}
                   className="text-slate-400 hover:text-slate-100 text-sm transition-colors"
                 >
                   About Us
@@ -166,7 +167,7 @@ export function SiteFooter() {
               </li>
               <li>
                 <InternalLink
-                  to="/privacy"
+                  to={ROUTES.privacy()}
                   className="text-slate-400 hover:text-slate-100 text-sm transition-colors"
                 >
                   Privacy Policy
@@ -174,7 +175,7 @@ export function SiteFooter() {
               </li>
               <li>
                 <InternalLink
-                  to="/terms"
+                  to={ROUTES.terms()}
                   className="text-slate-400 hover:text-slate-100 text-sm transition-colors"
                 >
                   Terms of Service
@@ -201,8 +202,8 @@ export function SiteFooter() {
             >
               Terms
             </InternalLink>
-            <InternalLink
-              to="/sitemap"
+                <InternalLink
+                  to={ROUTES.sitemap()}
               className="text-slate-400 hover:text-slate-100 transition-colors"
             >
               Sitemap

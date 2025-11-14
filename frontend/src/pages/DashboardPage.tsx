@@ -8,9 +8,10 @@ import { PatternDetector } from '../components/PatternDetector';
 import { ChartToolbar } from '../components/ChartToolbar';
 import { ComparisonMode } from '../components/ComparisonMode';
 import { RelatedStocks } from '../components/RelatedStocks';
+import { TrendingStocks } from '../components/TrendingStocks';
 import { fetchStockQuote, fetchHistoricalData, type StockQuote, type BarData } from '../lib/api';
 import { updateMetaTags, generateStockMetadata } from '../lib/seo';
-import { URLBuilder } from '../lib/urlHelpers';
+import { URLBuilder, ROUTES } from '../lib/urlHelpers';
 import { useAnnouncement } from '../hooks/useFocusManagement';
 import { DrawingManager, type DrawingTool } from '../lib/chartDrawings';
 import { InternalLink } from '../components/InternalLink';
@@ -86,13 +87,17 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
     loadChartData();
   }, [selectedSymbol, timeframe]);
 
+  const currentDetails = useMemo(
+    () => STOCK_DETAILS[selectedSymbol] || { name: `${selectedSymbol} Stock`, sector: 'Markets' },
+    [selectedSymbol]
+  );
+
   useEffect(() => {
-    const stockDetails = STOCK_DETAILS[selectedSymbol] || { name: `${selectedSymbol} Stock`, sector: 'Markets' };
     const currentPrice = quotes[selectedSymbol]?.price;
     updateMetaTags(
-      generateStockMetadata(selectedSymbol, stockDetails.name, currentPrice)
+      generateStockMetadata(selectedSymbol, currentDetails.name, currentPrice)
     );
-  }, [selectedSymbol, quotes]);
+  }, [selectedSymbol, quotes, currentDetails.name]);
 
   const handleSymbolSelect = (symbol: string) => {
     onSymbolChange(symbol, { navigate: true });
@@ -124,6 +129,32 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
     return builder.build();
   }, [relatedStocks, selectedSymbol]);
 
+  const trendingStocks = useMemo(() => {
+    const entries = Object.entries(quotes);
+    if (entries.length === 0) {
+      return DEFAULT_SYMBOLS.slice(0, 4).map((symbol) => ({
+        symbol,
+        name: STOCK_DETAILS[symbol]?.name || `${symbol} Stock`,
+        sector: STOCK_DETAILS[symbol]?.sector
+      }));
+    }
+
+    return entries
+      .sort(([, aQuote], [, bQuote]) => {
+        const aChange = Math.abs(aQuote?.changePercent || 0);
+        const bChange = Math.abs(bQuote?.changePercent || 0);
+        return bChange - aChange;
+      })
+      .slice(0, 5)
+      .map(([symbol, quote]) => ({
+        symbol,
+        name: STOCK_DETAILS[symbol]?.name || `${symbol} Stock`,
+        price: quote?.price,
+        changePercent: quote?.changePercent,
+        sector: STOCK_DETAILS[symbol]?.sector
+      }));
+  }, [quotes]);
+
   return (
     <>
       <section id="watchlist" className="mb-6" aria-label="Stock watchlist">
@@ -145,6 +176,10 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
         </div>
       </section>
 
+      <div className="mb-8" aria-label="Trending insights">
+        <TrendingStocks items={trendingStocks} onSelectSymbol={handleSymbolSelect} />
+      </div>
+
       <section id="chart" className="mb-6" aria-label="Trading chart and analysis">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -152,6 +187,17 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
             {quotes[selectedSymbol] && (
               <p className="text-sm text-slate-400">
                 Current: {quotes[selectedSymbol].price.toFixed(2)} USD
+              </p>
+            )}
+            {currentDetails.sector && (
+              <p className="text-sm text-slate-400">
+                Sector:{' '}
+                <InternalLink
+                  to={ROUTES.sector(currentDetails.sector)}
+                  className="text-blue-400 hover:text-blue-300"
+                >
+                  {currentDetails.sector}
+                </InternalLink>
               </p>
             )}
           </div>
