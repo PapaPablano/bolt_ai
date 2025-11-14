@@ -10,7 +10,8 @@
     "lint": "npm run lint --prefix frontend && eslint .",
     "install:all": "npm install && cd frontend && npm install",
     "smoke": "tsx scripts/smokeTest.ts",
-    "invoke": "tsx scripts/testInvoke.ts"
+    "invoke": "tsx scripts/testInvoke.ts",
+    "vite:server": "tsx scripts/startViteServer.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.80.0",
@@ -22,6 +23,7 @@
     "globals": "^15.15.0",
     "tsx": "^4.19.2",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.38.0"
+    "typescript-eslint": "^8.38.0",
+    "vite": "^7.2.2"
   }
 }
