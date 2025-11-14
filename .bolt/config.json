@@ -1,0 +1,22 @@
+{
+  "build": {
+    "command": "npm run build",
+    "outputDirectory": "frontend/dist"
+  },
+  "dev": {
+    "command": "npm run dev",
+    "port": 5173
+  },
+  "installCommand": "npm install && cd frontend && npm install",
+  "preview": {
+    "command": "npm run preview",
+    "port": 4173
+  },
+  "env": {
+    "prefixes": ["VITE_"],
+    "required": [
+      "VITE_SUPABASE_URL",
+      "VITE_SUPABASE_ANON_KEY"
+    ]
+  }
+}

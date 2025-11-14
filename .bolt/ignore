@@ -1,0 +1,43 @@
+# shellcheck disable=all
+
+# Dependencies
+node_modules/**
+frontend/node_modules/**
+.npm/**
+
+# Build outputs
+frontend/dist/**
+dist/**
+build/**
+
+# Git metadata
+.git/**
+.gitignore
+.github/**
+
+# Coverage / logs
+coverage/**
+*.log
+
+# Supabase local artifacts
+supabase/migrations/.local/**
+.supabase/**
+
+# Environment files
+.env
+.env.local
+.env.*.local
+frontend/.env.local
+frontend/.env.*.local
+
+# Package managers
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# IDE / OS files
+.vscode/**
+.idea/**
+*.swp
+.DS_Store
+Thumbs.db

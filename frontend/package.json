@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc --noEmit && vite build",
     "build:dev": "vite build --mode development",
-    "lint": "eslint .",
+    "lint": "eslint src --ext .ts,.tsx",
     "preview": "vite preview"
   },
   "dependencies": {
