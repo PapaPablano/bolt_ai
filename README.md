@@ -24,6 +24,8 @@ npm run dev
 
 Visit `http://localhost:5173` to see the app!
 
+**📖 Having trouble?** See [SETUP.md](./SETUP.md) for detailed setup instructions and troubleshooting.
+
 **For Bolt.new deployment**, see [BOLT_DEPLOYMENT.md](./BOLT_DEPLOYMENT.md) for detailed instructions.
 
 ---
@@ -103,6 +105,20 @@ The `project/src/schwab-api` package provides:
 - `SchwabStreamer` – WebSocket client for real-time equities, options, and futures feeds
 
 See `project/src/supabase/database.ts` for examples of persisting Schwab data back into Supabase.
+
+---
+
+## Troubleshooting
+
+### Dependencies Not Installing?
+
+This project has a **multi-package structure** (root + frontend). Common issues:
+
+- **Multiple package managers**: Use **npm only** (not yarn). Both `package-lock.json` and `yarn.lock` exist, but npm is the standard.
+- **Incomplete installation**: Run `npm run install:all` to install both root and frontend dependencies.
+- **Missing environment variables**: Copy `.env.example` to `frontend/.env.local` and add your Supabase credentials.
+
+**See [SETUP.md](./SETUP.md) for comprehensive troubleshooting guide.**
 
 ---
 
