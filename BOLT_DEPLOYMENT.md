@@ -78,10 +78,20 @@ supabase functions deploy stock-news --project-ref your-project-ref
 supabase functions deploy ml-signals --project-ref your-project-ref
 
 # Deploy Schwab functions (optional - if using Schwab API)
+# Authentication
 supabase functions deploy schwab-auth-init --project-ref your-project-ref
 supabase functions deploy schwab-auth-exchange --project-ref your-project-ref
+
+# Market Data
 supabase functions deploy schwab-quote --project-ref your-project-ref
 supabase functions deploy schwab-historical --project-ref your-project-ref
+supabase functions deploy schwab-option-chains --project-ref your-project-ref
+supabase functions deploy schwab-movers --project-ref your-project-ref
+supabase functions deploy schwab-market-hours --project-ref your-project-ref
+supabase functions deploy schwab-instruments --project-ref your-project-ref
+
+# Real-time Streaming
+supabase functions deploy schwab-stream --project-ref your-project-ref
 ```
 
 Or deploy all at once:
@@ -92,7 +102,14 @@ for func in */; do
 done
 ```
 
-**Note**: The new `schwab-auth-init` and `schwab-auth-exchange` functions enable Schwab OAuth setup. See [SCHWAB_API_TROUBLESHOOTING.md](./SCHWAB_API_TROUBLESHOOTING.md) for details.
+**New Schwab Functions:**
+- `schwab-option-chains` - Options chain data with Greeks
+- `schwab-movers` - Market movers for major indices
+- `schwab-market-hours` - Market hours for various markets
+- `schwab-instruments` - Search instruments or get by CUSIP
+- `schwab-stream` - Real-time streaming via WebSocket/SSE
+
+**Note**: See [SCHWAB_API_ENDPOINTS.md](./SCHWAB_API_ENDPOINTS.md) for complete API reference.
 
 ### Step 5: Install Dependencies & Run
 
