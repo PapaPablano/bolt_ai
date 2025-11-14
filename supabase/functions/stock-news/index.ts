@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from 'npm:@supabase/supabase-js@2.80.0'
 
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL') ?? '',
@@ -32,7 +32,7 @@ type AlpacaNewsResponse = {
 }
 
 const CACHE_PREFIX = 'news'
-const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+const CACHE_TTL_MS = 5 * 60 * 1000
 
 interface CachePayload {
   articles: NewsArticle[]
@@ -84,7 +84,6 @@ const alpacaFetch = async (params: AlpacaFetchParams) => {
   }
   return response.json();
 };
-
 
 const readCache = async (key: string): Promise<CachePayload | null> => {
   try {
@@ -162,7 +161,6 @@ Deno.serve(async (req) => {
     const includeContent = body?.includeContent ?? false
     const excludeContentless = body?.excludeContentless ?? false
 
-    // Build symbols string for API
     let symbolsParam: string | undefined
     if (symbolInput) {
       symbolsParam = symbolInput.toUpperCase()
@@ -172,7 +170,6 @@ Deno.serve(async (req) => {
 
     const cacheKey = cacheKeyFor(symbolInput, limit)
 
-    // Try cache first for simple queries (no date filters)
     if (!start && !end && !includeContent) {
       const cached = await readCache(cacheKey)
       if (cached) {
@@ -221,7 +218,6 @@ Deno.serve(async (req) => {
 
     console.log(`Alpaca returned ${newsResponse.news.length} news articles for ${symbolInput || 'all'}`)
 
-    // Cache simple queries
     if (!start && !end && !includeContent) {
       const payload: CachePayload = {
         articles: newsResponse.news,
@@ -252,7 +248,6 @@ Deno.serve(async (req) => {
     console.error('Error fetching Alpaca news:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
     
-    // Check if it's a credentials error
     if (errorMessage.includes('Missing Alpaca credentials')) {
       return new Response(
         JSON.stringify({ 
