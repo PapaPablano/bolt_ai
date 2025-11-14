@@ -9,6 +9,12 @@ Stock Whisperer is a full-stack trading application with:
 - **Backend**: Supabase Edge Functions (Deno) for market data APIs
 - **Data Source**: Alpaca Markets API for real-time stock quotes and historical data
 
+## Languages and frameworks
+
+Bolt focuses on JavaScript-based web technologies. It supports:
+- Node.js for the backend.
+- Browser-native code: any JavaScript framework that runs on the frontend.
+
 ## Prerequisites
 
 1. **Supabase Project**: Create a free account at [supabase.com](https://supabase.com)

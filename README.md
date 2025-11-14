@@ -2,6 +2,12 @@
 
 A powerful stock trading and analysis platform with real-time market data, interactive charts, and ML-powered insights.
 
+## Languages and frameworks
+
+Bolt focuses on JavaScript-based web technologies. It supports:
+- Node.js for the backend.
+- Browser-native code: any JavaScript framework that runs on the frontend.
+
 ## 🚀 Quick Start
 
 ```bash
