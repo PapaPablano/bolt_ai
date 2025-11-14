@@ -1,0 +1,19 @@
+services:
+  vite-dev:
+    build:
+      context: frontend
+      dockerfile: ./Dockerfile.dev
+    environment:
+      NODE_ENV: development
+      VITE_DEV_SERVER_PORT: ${VITE_DEV_SERVER_PORT:-5173}
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:?VITE_SUPABASE_URL is required}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:?VITE_SUPABASE_ANON_KEY is required}
+    ports:
+      - "${VITE_DEV_SERVER_PORT:-5173}:${VITE_DEV_SERVER_PORT:-5173}"
+    volumes:
+      - ./frontend:/usr/src/app
+      - vite_dev_node_modules:/usr/src/app/node_modules
+    command: npm run dev -- --host 0.0.0.0 --port ${VITE_DEV_SERVER_PORT:-5173}
+
+volumes:
+  vite_dev_node_modules:
