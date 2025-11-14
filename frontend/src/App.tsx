@@ -7,8 +7,11 @@ import { TimeframeSelector } from './components/TimeframeSelector';
 import { PatternDetector } from './components/PatternDetector';
 import { ChartToolbar } from './components/ChartToolbar';
 import { ComparisonMode } from './components/ComparisonMode';
+import { SkipLinks } from './components/SkipLinks';
+import { FocusIndicator } from './components/FocusIndicator';
 import { fetchStockQuote, fetchHistoricalData, type StockQuote, type BarData } from './lib/api';
 import { DrawingManager, type DrawingTool } from './lib/chartDrawings';
+import { useAnnouncement } from './hooks/useFocusManagement';
 import { BarChart3, GitCompare } from 'lucide-react';
 
 const DEFAULT_SYMBOLS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA'];
@@ -22,6 +25,7 @@ function App() {
   const [showComparison, setShowComparison] = useState(false);
   const [drawingManager] = useState(() => new DrawingManager());
   const [activeTool, setActiveTool] = useState<DrawingTool>('cursor');
+  const announce = useAnnouncement();
 
   useEffect(() => {
     const loadWatchlist = async () => {
@@ -70,6 +74,7 @@ function App() {
 
   const handleSymbolSelect = (symbol: string) => {
     setSelectedSymbol(symbol);
+    announce(`Selected ${symbol}. Loading chart data.`, 'polite');
   };
 
   const handleToolChange = (tool: DrawingTool) => {
@@ -83,7 +88,9 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm sticky top-0 z-40">
+      <FocusIndicator />
+      <SkipLinks />
+      <header className="border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm sticky top-0 z-40" role="banner">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -97,8 +104,8 @@ function App() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6">
-        <section className="mb-6">
+      <main id="main-content" className="container mx-auto px-4 py-6" role="main">
+        <section id="watchlist" className="mb-6" aria-label="Stock watchlist">
           <h2 className="text-lg font-semibold text-slate-300 mb-4">Watchlist</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
             {DEFAULT_SYMBOLS.map((symbol) => (
@@ -117,7 +124,7 @@ function App() {
           </div>
         </section>
 
-        <section className="mb-6">
+        <section id="chart" className="mb-6" aria-label="Trading chart and analysis">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-2xl font-bold text-slate-100">{selectedSymbol}</h2>
@@ -161,7 +168,7 @@ function App() {
               )}
             </div>
 
-            <div className="lg:col-span-1">
+            <div id="news" className="lg:col-span-1">
               <NewsPanel symbol={selectedSymbol} />
             </div>
           </div>
@@ -177,7 +184,7 @@ function App() {
         />
       )}
 
-      <footer className="border-t border-slate-800 mt-12 py-6">
+      <footer className="border-t border-slate-800 mt-12 py-6" role="contentinfo">
         <div className="container mx-auto px-4 text-center text-sm text-slate-500">
           <p>Stock Whisperer - Phase 1: Enhanced Charting Foundation</p>
           <p className="mt-1">Powered by Alpaca Market Data & Supabase</p>
