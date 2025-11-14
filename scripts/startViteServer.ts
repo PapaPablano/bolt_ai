@@ -7,6 +7,8 @@ const __dirname = dirname(__filename);
 const frontendRoot = resolve(__dirname, '../frontend');
 
 async function boot() {
+  process.chdir(frontendRoot);
+
   const server = await createServer({
     configFile: resolve(frontendRoot, 'vite.config.ts'),
     root: frontendRoot,
