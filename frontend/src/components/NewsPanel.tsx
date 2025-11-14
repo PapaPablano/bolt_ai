@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ExternalLink, Newspaper } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { linkifyStockSymbols } from '../lib/seo';
 
 interface NewsArticle {
   id: number;
@@ -103,7 +104,12 @@ export function NewsPanel({ symbol }: NewsPanelProps) {
                 </h4>
                 <ExternalLink className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
               </div>
-              <p className="text-xs text-slate-400 mb-2 line-clamp-2">{article.summary}</p>
+              <p
+                className="text-xs text-slate-400 mb-2 line-clamp-2"
+                dangerouslySetInnerHTML={{
+                  __html: linkifyStockSymbols(article.summary, article.symbols || []),
+                }}
+              />
               <div className="flex items-center justify-between text-xs text-slate-500">
                 <span>{article.source || article.author}</span>
                 <span>{formatTime(article.created_at)}</span>

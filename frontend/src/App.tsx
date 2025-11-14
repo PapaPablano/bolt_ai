@@ -1,203 +1,202 @@
-import { useState, useEffect } from 'react';
-import { TradingChart } from './components/TradingChart';
-import { StockCard } from './components/StockCard';
-import { SearchBar } from './components/SearchBar';
-import { NewsPanel } from './components/NewsPanel';
-import { TimeframeSelector } from './components/TimeframeSelector';
-import { PatternDetector } from './components/PatternDetector';
-import { ChartToolbar } from './components/ChartToolbar';
-import { ComparisonMode } from './components/ComparisonMode';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Routes, Route, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { BarChart3 } from 'lucide-react';
 import { SkipLinks } from './components/SkipLinks';
 import { FocusIndicator } from './components/FocusIndicator';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { PWAUpdateNotification } from './components/PWAUpdateNotification';
-import { fetchStockQuote, fetchHistoricalData, type StockQuote, type BarData } from './lib/api';
-import { DrawingManager, type DrawingTool } from './lib/chartDrawings';
-import { useAnnouncement } from './hooks/useFocusManagement';
-import { BarChart3, GitCompare } from 'lucide-react';
-
-const DEFAULT_SYMBOLS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA'];
+import { SearchBar } from './components/SearchBar';
+import { BreadcrumbsWithSchema } from './components/Breadcrumbs';
+import { SiteFooter } from './components/SiteFooter';
+import { NavLink } from './components/InternalLink';
+import { DashboardPage } from './pages/DashboardPage';
+import { WatchlistPage } from './pages/WatchlistPage';
+import { MarketsPage } from './pages/MarketsPage';
+import { MarketIndicesPage } from './pages/MarketIndicesPage';
+import { MarketSectorsPage } from './pages/MarketSectorsPage';
+import { ComparePage } from './pages/ComparePage';
+import { ScreenerPage } from './pages/ScreenerPage';
+import { AlertsPage } from './pages/AlertsPage';
+import { PortfolioPage } from './pages/PortfolioPage';
+import { HelpPage } from './pages/HelpPage';
+import { AboutPage } from './pages/AboutPage';
+import { PrivacyPage } from './pages/PrivacyPage';
+import { TermsPage } from './pages/TermsPage';
+import { PlaceholderPage } from './pages/PlaceholderPage';
+import { ROUTES } from './lib/urlHelpers';
+import { generateStructuredData } from './lib/seo';
 
 function App() {
   const [selectedSymbol, setSelectedSymbol] = useState('AAPL');
-  const [quotes, setQuotes] = useState<Record<string, StockQuote>>({});
-  const [chartData, setChartData] = useState<BarData[]>([]);
-  const [isLoadingChart, setIsLoadingChart] = useState(false);
-  const [timeframe, setTimeframe] = useState('1M');
-  const [showComparison, setShowComparison] = useState(false);
-  const [drawingManager] = useState(() => new DrawingManager());
-  const [activeTool, setActiveTool] = useState<DrawingTool>('cursor');
-  const announce = useAnnouncement();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  useEffect(() => {
-    const loadWatchlist = async () => {
-      const quotePromises = DEFAULT_SYMBOLS.map(async (symbol) => {
-        try {
-          const quote = await fetchStockQuote(symbol);
-          return [symbol, quote] as const;
-        } catch (error) {
-          console.error(`Error fetching quote for ${symbol}:`, error);
-          return null;
+  const handleSymbolChange = useCallback(
+    (symbol: string, options: { navigate?: boolean } = {}) => {
+      const normalized = symbol.toUpperCase();
+      setSelectedSymbol(normalized);
+
+      if (options.navigate) {
+        const destination = ROUTES.stock(normalized);
+        if (location.pathname !== destination) {
+          navigate(destination);
         }
-      });
-
-      const results = await Promise.all(quotePromises);
-      const quotesMap: Record<string, StockQuote> = {};
-      results.forEach((result) => {
-        if (result) {
-          quotesMap[result[0]] = result[1];
-        }
-      });
-
-      setQuotes(quotesMap);
-    };
-
-    loadWatchlist();
-    const interval = setInterval(loadWatchlist, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const loadChartData = async () => {
-      setIsLoadingChart(true);
-      try {
-        const data = await fetchHistoricalData(selectedSymbol, timeframe);
-        setChartData(data);
-      } catch (error) {
-        console.error('Error loading chart data:', error);
-        setChartData([]);
-      } finally {
-        setIsLoadingChart(false);
       }
-    };
+    },
+    [location.pathname, navigate]
+  );
 
-    loadChartData();
-  }, [selectedSymbol, timeframe]);
-
-  const handleSymbolSelect = (symbol: string) => {
-    setSelectedSymbol(symbol);
-    announce(`Selected ${symbol}. Loading chart data.`, 'polite');
-  };
-
-  const handleToolChange = (tool: DrawingTool) => {
-    setActiveTool(tool);
-    drawingManager.setActiveTool(tool);
-  };
-
-  const handleClearDrawings = () => {
-    drawingManager.clearDrawings();
-  };
+  const navItems = useMemo(
+    () => [
+      {
+        label: 'Dashboard',
+        to: ROUTES.home(),
+        isActive: location.pathname === '/' || location.pathname.startsWith('/stocks')
+      },
+      { label: 'Watchlist', to: ROUTES.watchlist(), isActive: location.pathname.startsWith('/watchlist') },
+      { label: 'Markets', to: ROUTES.markets(), isActive: location.pathname.startsWith('/markets') },
+      { label: 'Compare', to: ROUTES.compare(), isActive: location.pathname.startsWith('/compare') },
+      { label: 'Help', to: ROUTES.help(), isActive: location.pathname.startsWith('/help') },
+    ],
+    [location.pathname]
+  );
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col" data-testid="app-shell">
       <FocusIndicator />
       <SkipLinks />
       <PWAInstallPrompt />
       <PWAUpdateNotification />
-      <header className="border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm sticky top-0 z-40" role="banner">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between gap-4">
+      <GlobalStructuredData />
+
+      <header className="border-b border-slate-900 bg-slate-950/95 backdrop-blur-sm sticky top-0 z-40" role="banner">
+        <div className="container mx-auto px-4 py-4 space-y-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
               <BarChart3 className="w-8 h-8 text-blue-500" aria-hidden="true" />
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                Stock Whisperer
-              </h1>
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-blue-400">Stock Whisperer</p>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+                  Intelligent Market Navigation
+                </h1>
+              </div>
             </div>
-            <nav role="navigation" aria-label="Main">
-              <SearchBar onSelectSymbol={handleSymbolSelect} />
+            <nav aria-label="Primary" className="flex flex-wrap gap-4">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.label}
+                  to={item.to}
+                  active={item.isActive}
+                  className={`text-sm font-medium transition-colors ${item.isActive ? 'text-white' : 'text-slate-400 hover:text-slate-100'}`}
+                >
+                  {item.label}
+                </NavLink>
+              ))}
             </nav>
+          </div>
+          <div role="search" aria-label="Global symbol search">
+            <SearchBar onSelectSymbol={(symbol) => handleSymbolChange(symbol, { navigate: true })} />
           </div>
         </div>
       </header>
 
-      <main id="main-content" className="container mx-auto px-4 py-6" role="main">
-        <section id="watchlist" className="mb-6" aria-label="Stock watchlist">
-          <h2 className="text-lg font-semibold text-slate-300 mb-4">Watchlist</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-            {DEFAULT_SYMBOLS.map((symbol) => (
-              <div key={symbol}>
-                {quotes[symbol] ? (
-                  <StockCard
-                    quote={quotes[symbol]}
-                    onClick={() => setSelectedSymbol(symbol)}
-                    isSelected={selectedSymbol === symbol}
-                  />
-                ) : (
-                  <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 h-32 animate-pulse" />
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section id="chart" className="mb-6" aria-label="Trading chart and analysis">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-100">{selectedSymbol}</h2>
-              {quotes[selectedSymbol] && (
-                <p className="text-sm text-slate-400">
-                  Current: {quotes[selectedSymbol].price.toFixed(2)} USD
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-4">
-              <TimeframeSelector selected={timeframe} onChange={setTimeframe} />
-              <button
-                onClick={() => setShowComparison(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-              >
-                <GitCompare className="w-4 h-4" />
-                Compare
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            <div className="lg:col-span-2">
-              <div className="mb-4">
-                <ChartToolbar
-                  activeTool={activeTool}
-                  onToolChange={handleToolChange}
-                  onClearDrawings={handleClearDrawings}
-                />
-              </div>
-              {isLoadingChart ? (
-                <div className="bg-slate-800/50 border border-slate-700 rounded-lg h-[600px] flex items-center justify-center">
-                  <div className="text-slate-400">Loading chart...</div>
-                </div>
-              ) : chartData.length > 0 ? (
-                <TradingChart data={chartData} symbol={selectedSymbol} />
-              ) : (
-                <div className="bg-slate-800/50 border border-slate-700 rounded-lg h-[600px] flex items-center justify-center">
-                  <div className="text-slate-400">No chart data available</div>
-                </div>
-              )}
-            </div>
-
-            <aside id="news" className="lg:col-span-1" role="complementary" aria-label="Stock news and updates">
-              <NewsPanel symbol={selectedSymbol} />
-            </aside>
-          </div>
-
-          <PatternDetector data={chartData} />
-        </section>
+      <main id="main-content" className="container mx-auto px-4 py-8 flex-1 w-full" role="main">
+        <BreadcrumbsWithSchema />
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <DashboardPage
+                selectedSymbol={selectedSymbol}
+                onSymbolChange={handleSymbolChange}
+              />
+            }
+          />
+          <Route
+            path="/stocks/:symbol"
+            element={
+              <RoutedDashboardPage
+                selectedSymbol={selectedSymbol}
+                onSymbolChange={handleSymbolChange}
+              />
+            }
+          />
+          <Route
+            path={ROUTES.watchlist()}
+            element={<WatchlistPage onSymbolSelect={handleSymbolChange} />}
+          />
+          <Route path={ROUTES.markets()} element={<MarketsPage />} />
+          <Route path={ROUTES.marketIndices()} element={<MarketIndicesPage />} />
+          <Route path={ROUTES.marketSectors()} element={<MarketSectorsPage />} />
+          <Route path={ROUTES.compare()} element={<ComparePage />} />
+          <Route path={ROUTES.screener()} element={<ScreenerPage />} />
+          <Route path={ROUTES.alerts()} element={<AlertsPage />} />
+          <Route path={ROUTES.portfolio()} element={<PortfolioPage />} />
+          <Route path={ROUTES.help()} element={<HelpPage />} />
+          <Route path={ROUTES.about()} element={<AboutPage />} />
+          <Route path={ROUTES.privacy()} element={<PrivacyPage />} />
+          <Route path={ROUTES.terms()} element={<TermsPage />} />
+          <Route
+            path="*"
+            element={
+              <PlaceholderPage
+                title="Page not found"
+                description="The page you are looking for is not available. Use the navigation or return to the dashboard to continue exploring live market data."
+                metadata={{
+                  title: 'Page Not Found | Stock Whisperer',
+                  description: 'The page you requested could not be found.',
+                  canonical: location.pathname,
+                  noindex: true,
+                }}
+              />
+            }
+          />
+        </Routes>
       </main>
 
-      {showComparison && (
-        <ComparisonMode
-          initialSymbol={selectedSymbol}
-          onClose={() => setShowComparison(false)}
-        />
-      )}
-
-      <footer className="border-t border-slate-800 mt-12 py-6" role="contentinfo">
-        <div className="container mx-auto px-4 text-center text-sm text-slate-500">
-          <p>Stock Whisperer - Phase 1: Enhanced Charting Foundation</p>
-          <p className="mt-1">Powered by Alpaca Market Data & Supabase</p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
 
 export default App;
+
+interface RoutedDashboardPageProps {
+  selectedSymbol: string;
+  onSymbolChange: (symbol: string, options?: { navigate?: boolean }) => void;
+}
+
+function RoutedDashboardPage({ selectedSymbol, onSymbolChange }: RoutedDashboardPageProps) {
+  const { symbol } = useParams<{ symbol: string }>();
+
+  useEffect(() => {
+    if (symbol && symbol.toUpperCase() !== selectedSymbol) {
+      onSymbolChange(symbol, { navigate: false });
+    }
+  }, [symbol, onSymbolChange, selectedSymbol]);
+
+  return (
+    <DashboardPage
+      selectedSymbol={selectedSymbol}
+      onSymbolChange={onSymbolChange}
+    />
+  );
+}
+
+function GlobalStructuredData() {
+  const organizationSchema = useMemo(() => generateStructuredData('Organization', {}), []);
+  const webAppSchema = useMemo(() => generateStructuredData('WebApplication', {}), []);
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: organizationSchema }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: webAppSchema }}
+      />
+    </>
+  );
+}
