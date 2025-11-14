@@ -1,13 +1,32 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Filter, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Filter, History, Loader2, RefreshCw, Rocket } from 'lucide-react';
 import { InternalLink, StockLink } from '../components/InternalLink';
 import { generatePageMetadata, updateMetaTags } from '../lib/seo';
+import { useSupabaseUser } from '../hooks/useSupabaseUser';
+import { supabase } from '../lib/supabase';
+import { SupabaseAuthPanel } from '../components/SupabaseAuthPanel';
 
 interface ScreenerFilters {
   sector: string;
   marketCap: string;
   price: string;
   performance: string;
+}
+
+interface ScreenerResult {
+  symbol: string;
+  name: string;
+  exchange?: string;
+  instrumentType?: string;
+  source?: string;
+}
+
+interface ScreenerRun {
+  id: string;
+  cacheKey: string;
+  lastUpdated: string;
+  filters: ScreenerFilters;
+  results: ScreenerResult[];
 }
 
 const INITIAL_FILTERS: ScreenerFilters = {
@@ -17,26 +36,152 @@ const INITIAL_FILTERS: ScreenerFilters = {
   performance: '1M',
 };
 
-const MOCK_RESULTS = [
-  { symbol: 'MDB', name: 'MongoDB Inc.', sector: 'Technology', momentum: '+14%', marketCap: 'Mid' },
-  { symbol: 'DDOG', name: 'Datadog Inc.', sector: 'Technology', momentum: '+12%', marketCap: 'Large' },
-  { symbol: 'SMCI', name: 'Super Micro Computer', sector: 'Technology', momentum: '+40%', marketCap: 'Mid' },
-];
-
 export function ScreenerPage() {
+  const { user, loading: userLoading } = useSupabaseUser();
   const [filters, setFilters] = useState<ScreenerFilters>(INITIAL_FILTERS);
+  const [results, setResults] = useState<ScreenerResult[]>([]);
+  const [savedRuns, setSavedRuns] = useState<ScreenerRun[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     updateMetaTags(generatePageMetadata('screener'));
   }, []);
 
-  const filteredResults = useMemo(() => MOCK_RESULTS, [filters]);
+  const loadRuns = useCallback(async () => {
+    if (!user) {
+      setSavedRuns([]);
+      setResults([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('stock_cache')
+      .select('id, cache_key, data, last_updated')
+      .like('cache_key', `screener:${user.id}:%`)
+      .order('last_updated', { ascending: false })
+      .limit(10);
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    const mapped: ScreenerRun[] = (data ?? []).map((row: any) => ({
+      id: row.id,
+      cacheKey: row.cache_key,
+      lastUpdated: row.last_updated,
+      filters: row.data?.filters ?? INITIAL_FILTERS,
+      results: row.data?.results ?? [],
+    }));
+
+    setSavedRuns(mapped);
+    if (!results.length && mapped[0]) {
+      setResults(mapped[0].results);
+    }
+  }, [user, results.length]);
+
+  useEffect(() => {
+    loadRuns();
+  }, [loadRuns]);
 
   const handleChange = (key: keyof ScreenerFilters, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleReset = () => setFilters(INITIAL_FILTERS);
+
+  const sectorQueryMap: Record<string, string> = {
+    technology: 'technology stocks',
+    consumer: 'consumer stocks',
+    healthcare: 'healthcare stocks',
+    energy: 'energy stocks',
+  };
+
+  const handleRunScreener = async () => {
+    if (!user) return;
+    setIsRunning(true);
+    setStatusMessage(null);
+    setError(null);
+
+    const query = sectorQueryMap[filters.sector] ?? 'stocks';
+
+    try {
+      const { data, error } = await supabase.functions.invoke('stock-search', {
+        body: { query },
+      });
+
+      if (error) throw error;
+
+      const apiResults: ScreenerResult[] = (data?.results ?? []).map((result: any) => ({
+        symbol: result.symbol,
+        name: result.name,
+        exchange: result.exchange,
+        instrumentType: result.instrumentType,
+        source: data?.source ?? 'alpaca',
+      }));
+
+      const normalized = apiResults.slice(0, 9);
+
+      if (!normalized.length) {
+        setStatusMessage('Screener ran successfully but returned no matches.');
+      } else {
+        setStatusMessage(`Loaded ${normalized.length} candidates.`);
+      }
+
+      setResults(normalized);
+
+      const cacheKey = `screener:${user.id}:${Date.now()}`;
+      const { error: upsertError } = await supabase.from('stock_cache').upsert(
+        [
+          {
+            cache_key: cacheKey,
+            data: {
+              filters,
+              results: normalized,
+            },
+            last_updated: new Date().toISOString(),
+          },
+        ],
+        { onConflict: 'cache_key' }
+      );
+
+      if (upsertError) {
+        console.error('Unable to cache screener results', upsertError);
+      } else {
+        await loadRuns();
+      }
+    } catch (err) {
+      console.error('Screener run failed', err);
+      setError(err instanceof Error ? err.message : 'Unable to execute screener');
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  const handleLoadRun = (run: ScreenerRun) => {
+    setFilters(run.filters);
+    setResults(run.results);
+    setStatusMessage(`Loaded screener from ${new Date(run.lastUpdated).toLocaleString()}`);
+  };
+
+  if (userLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <SupabaseAuthPanel
+        title="Sign in to save screener runs"
+        description="Your filters and results are saved in Supabase so you can revisit high-conviction setups later."
+      />
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -47,6 +192,18 @@ export function ScreenerPage() {
           Combine technical, fundamental, and behavioral signals to surface actionable trade ideas tailored to your playbook.
         </p>
       </header>
+
+      {statusMessage && (
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-sm text-slate-200">
+          {statusMessage}
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm text-red-200">
+          {error}
+        </div>
+      )}
 
       <form className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 space-y-4">
         <div className="flex items-center gap-2 text-slate-200 font-semibold">
@@ -117,17 +274,60 @@ export function ScreenerPage() {
           </button>
           <span>Results update automatically</span>
         </div>
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <button
+            type="button"
+            onClick={handleRunScreener}
+            disabled={isRunning}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition-colors text-white font-semibold disabled:opacity-50"
+          >
+            {isRunning ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Rocket className="w-4 h-4" aria-hidden="true" />}
+            Run Screener
+          </button>
+          <span className="text-slate-500">
+            Results and filters are stored in Supabase as part of your research history.
+          </span>
+        </div>
       </form>
+
+      <section className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 space-y-4">
+        <div className="flex items-center gap-2 text-slate-200 font-semibold">
+          <History className="w-5 h-5 text-blue-400" aria-hidden="true" />
+          Saved Runs
+        </div>
+        {savedRuns.length === 0 ? (
+          <p className="text-sm text-slate-400">No saved runs yet. Execute the screener to create your first entry.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {savedRuns.map((run) => (
+              <button
+                key={run.cacheKey}
+                onClick={() => handleLoadRun(run)}
+                className="px-4 py-2 rounded-lg border border-slate-700 text-sm text-slate-300 hover:border-blue-500 transition-colors"
+              >
+                {run.filters.sector} • {new Date(run.lastUpdated).toLocaleDateString()}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-200">Screened Opportunities ({filteredResults.length})</h3>
+          <h3 className="text-lg font-semibold text-slate-200">
+            Screened Opportunities ({results.length})
+          </h3>
           <InternalLink to="/alerts" className="text-blue-400 hover:text-blue-300 text-sm">
             Create alert from filter →
           </InternalLink>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {filteredResults.map((result) => (
+          {results.length === 0 && (
+            <div className="col-span-full text-sm text-slate-400">
+              Run the screener to generate symbols that match your filters.
+            </div>
+          )}
+          {results.map((result) => (
             <article
               key={result.symbol}
               className="border border-slate-800 rounded-2xl p-4 bg-slate-900/50 flex flex-col gap-2"
@@ -136,9 +336,10 @@ export function ScreenerPage() {
                 {result.symbol}
               </StockLink>
               <p className="text-sm text-slate-400">{result.name}</p>
-              <div className="text-xs text-slate-500 uppercase tracking-widest">{result.sector}</div>
-              <div className="font-semibold text-green-400">{result.momentum} momentum</div>
-              <div className="text-xs text-slate-500">Market Cap: {result.marketCap}</div>
+              <div className="text-xs text-slate-500 uppercase tracking-widest">
+                {result.exchange || 'Unspecified'} • {result.instrumentType ?? 'equity'}
+              </div>
+              <div className="text-xs text-slate-500">Source: {result.source ?? 'alpaca'}</div>
             </article>
           ))}
         </div>
