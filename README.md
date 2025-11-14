@@ -120,6 +120,17 @@ This project has a **multi-package structure** (root + frontend). Common issues:
 
 **See [SETUP.md](./SETUP.md) for comprehensive troubleshooting guide.**
 
+### Dependency Analysis Tools (like `depcheck`)
+
+Automated dependency analysis tools like `depcheck` may incorrectly flag critical dependencies as "unused". This is a known issue in monorepo environments where dependencies are split across multiple `package.json` files (in our case, the root and `frontend/`).
+
+**The dependencies in this project are correctly configured and are not unused.** The "unused" reports are false positives. For example:
+
+-   **Root `devDependencies`** (like `tsx`, `eslint`, `typescript`) are used for running scripts and for development tooling across the entire project.
+-   **Frontend dependencies** are managed separately in `frontend/package.json`.
+
+The most reliable way to verify dependencies is through the project's build and test pipelines, not static analysis tools that are not configured for this specific monorepo structure. Please refer to `ARCHITECTURE.md` for a detailed explanation of the dependency strategy.
+
 ---
 
 ## Next Steps

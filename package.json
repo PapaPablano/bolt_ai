@@ -14,18 +14,18 @@
     "vite:server": "tsx scripts/startViteServer.ts"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.80.0",
-    "dotenv": "^17.2.3"
+    "@supabase/supabase-js": "^2.80.0", // Supabase client for interacting with the Supabase backend
+    "dotenv": "^17.2.3" // Loads environment variables from a .env file
   },
   "devDependencies": {
-    "@eslint/js": "^9.32.0",
-    "@types/node": "^22.16.5",
-    "@vitejs/plugin-react-swc": "^3.11.0",
-    "eslint": "^9.32.0",
-    "globals": "^15.15.0",
-    "tsx": "^4.19.2",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.38.0",
-    "vite": "^7.2.2"
+    "@eslint/js": "^9.32.0", // Core ESLint rules
+    "@types/node": "^22.16.5", // TypeScript type definitions for Node.js
+    "@vitejs/plugin-react-swc": "^3.11.0", // Vite plugin for React using SWC
+    "eslint": "^9.32.0", // Linter for identifying and reporting on patterns in JavaScript
+    "globals": "^15.15.0", // Common global variables for ESLint
+    "tsx": "^4.19.2", // Executes TypeScript files directly
+    "typescript": "^5.8.3", // TypeScript compiler
+    "typescript-eslint": "^8.38.0", // ESLint plugin for TypeScript
+    "vite": "^7.2.2" // Frontend build tool and development server
   }
 }
