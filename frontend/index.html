@@ -2,11 +2,77 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+
+    <!-- Primary Meta Tags -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="title" content="Stock Whisperer - Professional Trading Platform" />
+    <meta name="description" content="Professional stock trading and analysis platform with real-time market data, interactive charts, technical indicators, and ML-powered insights" />
+    <meta name="keywords" content="stock trading, stock analysis, technical indicators, stock charts, market data, trading platform" />
+    <meta name="author" content="Stock Whisperer" />
+    <title>Stock Whisperer - Professional Trading Platform</title>
+
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#0f172a" />
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-72x72.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-72x72.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png" />
+    <link rel="mask-icon" href="/icons/icon-192x192.png" color="#0f172a" />
+    <link rel="shortcut icon" href="/icons/icon-72x72.png" />
+
+    <!-- iOS Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Stock Whisperer" />
+    <link rel="apple-touch-icon" href="/icons/icon-152x152.png" />
+    <link rel="apple-touch-startup-image" href="/icons/icon-512x512.png" />
+
+    <!-- Microsoft Tiles -->
+    <meta name="msapplication-TileColor" content="#0f172a" />
+    <meta name="msapplication-TileImage" content="/icons/icon-144x144.png" />
+    <meta name="msapplication-config" content="/browserconfig.xml" />
+    <meta name="msapplication-tap-highlight" content="no" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://stockwhisperer.app/" />
+    <meta property="og:title" content="Stock Whisperer - Professional Trading Platform" />
+    <meta property="og:description" content="Professional stock trading and analysis platform with real-time market data, interactive charts, and ML-powered insights" />
+    <meta property="og:image" content="/icons/icon-512x512.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://stockwhisperer.app/" />
+    <meta property="twitter:title" content="Stock Whisperer - Professional Trading Platform" />
+    <meta property="twitter:description" content="Professional stock trading and analysis platform with real-time market data, interactive charts, and ML-powered insights" />
+    <meta property="twitter:image" content="/icons/icon-512x512.png" />
+
+    <!-- Additional Meta Tags -->
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="Stock Whisperer" />
+    <meta name="apple-mobile-web-app-title" content="Stock Whisperer" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Preload Critical Resources -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
   </head>
   <body>
+    <noscript>
+      <div style="padding: 40px; text-align: center; font-family: system-ui; background: #0f172a; color: #f8fafc; min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+        <div>
+          <h1 style="color: #60a5fa; margin-bottom: 16px;">JavaScript Required</h1>
+          <p style="color: #cbd5e1; font-size: 18px;">Stock Whisperer requires JavaScript to run. Please enable JavaScript in your browser settings.</p>
+        </div>
+      </div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

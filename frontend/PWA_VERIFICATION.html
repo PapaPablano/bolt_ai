@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PWA Verification - Stock Whisperer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 40px 20px;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 36px;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #60a5fa 0%, #22d3ee 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      font-size: 18px;
+      color: #cbd5e1;
+      margin-bottom: 40px;
+    }
+
+    .section {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    h2 {
+      font-size: 24px;
+      color: #e2e8f0;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .status.success {
+      background: rgba(34, 197, 94, 0.2);
+      color: #86efac;
+    }
+
+    .status.warning {
+      background: rgba(251, 191, 36, 0.2);
+      color: #fde047;
+    }
+
+    .status.error {
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+    }
+
+    .status.pending {
+      background: rgba(148, 163, 184, 0.2);
+      color: #cbd5e1;
+    }
+
+    .check-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .check-item {
+      padding: 12px 16px;
+      background: #0f172a;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .check-icon {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+    }
+
+    .check-icon.success {
+      background: #22c55e;
+      color: white;
+    }
+
+    .check-icon.error {
+      background: #ef4444;
+      color: white;
+    }
+
+    .check-icon.pending {
+      background: #94a3b8;
+      color: white;
+    }
+
+    .check-text {
+      flex: 1;
+      color: #cbd5e1;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .info-card {
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .info-label {
+      font-size: 14px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+
+    .info-value {
+      font-size: 18px;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+
+    button {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s;
+      margin-right: 12px;
+      margin-bottom: 12px;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .code {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      overflow-x: auto;
+      color: #cbd5e1;
+    }
+
+    .score {
+      font-size: 48px;
+      font-weight: bold;
+      text-align: center;
+      margin: 24px 0;
+    }
+
+    .score.excellent { color: #22c55e; }
+    .score.good { color: #3b82f6; }
+    .score.fair { color: #f59e0b; }
+    .score.poor { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 PWA Verification Tool</h1>
+    <p class="subtitle">Comprehensive Progressive Web App validation for Stock Whisperer</p>
+
+    <div class="section">
+      <h2>
+        Overall Score
+        <span id="overallStatus" class="status pending">Testing...</span>
+      </h2>
+      <div id="score" class="score">--</div>
+    </div>
+
+    <div class="section">
+      <h2>
+        Manifest File
+        <span id="manifestStatus" class="status pending">Checking...</span>
+      </h2>
+      <ul id="manifestChecks" class="check-list"></ul>
+      <div id="manifestData" class="code" style="margin-top: 16px;"></div>
+    </div>
+
+    <div class="section">
+      <h2>
+        Service Worker
+        <span id="swStatus" class="status pending">Checking...</span>
+      </h2>
+      <ul id="swChecks" class="check-list"></ul>
+      <div class="info-grid" style="margin-top: 16px;">
+        <div class="info-card">
+          <div class="info-label">State</div>
+          <div class="info-value" id="swState">--</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Scope</div>
+          <div class="info-value" id="swScope">--</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Cache Version</div>
+          <div class="info-value" id="swVersion">--</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>
+        Icons
+        <span id="iconsStatus" class="status pending">Checking...</span>
+      </h2>
+      <ul id="iconChecks" class="check-list"></ul>
+      <div id="iconPreview" style="margin-top: 16px;"></div>
+    </div>
+
+    <div class="section">
+      <h2>
+        Installation
+        <span id="installStatus" class="status pending">Checking...</span>
+      </h2>
+      <ul id="installChecks" class="check-list"></ul>
+      <div style="margin-top: 16px;">
+        <button id="installBtn" disabled>Install App</button>
+        <button id="refreshBtn">Refresh Tests</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>
+        Caching
+        <span id="cacheStatus" class="status pending">Checking...</span>
+      </h2>
+      <ul id="cacheChecks" class="check-list"></ul>
+      <div class="info-grid" style="margin-top: 16px;">
+        <div class="info-card">
+          <div class="info-label">Cached Resources</div>
+          <div class="info-value" id="cacheCount">--</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Cache Size</div>
+          <div class="info-value" id="cacheSize">--</div>
+        </div>
+      </div>
+      <button id="clearCacheBtn" style="margin-top: 16px;">Clear Cache</button>
+    </div>
+
+    <div class="section">
+      <h2>
+        Network
+        <span id="networkStatus" class="status success">Online</span>
+      </h2>
+      <div class="info-grid">
+        <div class="info-card">
+          <div class="info-label">Connection Type</div>
+          <div class="info-value" id="connectionType">--</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Effective Type</div>
+          <div class="info-value" id="effectiveType">--</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Downlink</div>
+          <div class="info-value" id="downlink">--</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">RTT</div>
+          <div class="info-value" id="rtt">--</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let installPrompt;
+    let checks = {
+      manifest: 0,
+      sw: 0,
+      icons: 0,
+      install: 0,
+      cache: 0
+    };
+
+    function addCheck(listId, text, status) {
+      const list = document.getElementById(listId);
+      const li = document.createElement('li');
+      li.className = 'check-item';
+      li.innerHTML = `
+        <div class="check-icon ${status}">${status === 'success' ? '✓' : status === 'error' ? '✗' : '?'}</div>
+        <div class="check-text">${text}</div>
+      `;
+      list.appendChild(li);
+      return status === 'success' ? 1 : 0;
+    }
+
+    function updateStatus(id, status, text) {
+      const el = document.getElementById(id);
+      el.className = `status ${status}`;
+      if (text) el.textContent = text;
+    }
+
+    async function checkManifest() {
+      try {
+        const response = await fetch('/manifest.json');
+        const manifest = await response.json();
+
+        document.getElementById('manifestData').textContent = JSON.stringify(manifest, null, 2);
+
+        checks.manifest += addCheck('manifestChecks', 'Manifest file exists', 'success');
+        checks.manifest += addCheck('manifestChecks', `Name: ${manifest.name}`, 'success');
+        checks.manifest += addCheck('manifestChecks', `Short name: ${manifest.short_name}`, 'success');
+        checks.manifest += addCheck('manifestChecks', `Theme color: ${manifest.theme_color}`, 'success');
+        checks.manifest += addCheck('manifestChecks', `Display mode: ${manifest.display}`, 'success');
+        checks.manifest += addCheck('manifestChecks', `${manifest.icons.length} icons defined`, manifest.icons.length >= 2 ? 'success' : 'error');
+        checks.manifest += addCheck('manifestChecks', `Start URL: ${manifest.start_url}`, 'success');
+
+        updateStatus('manifestStatus', checks.manifest >= 6 ? 'success' : 'warning', checks.manifest >= 6 ? 'Valid' : 'Issues Found');
+      } catch (error) {
+        addCheck('manifestChecks', 'Failed to load manifest.json', 'error');
+        updateStatus('manifestStatus', 'error', 'Failed');
+      }
+    }
+
+    async function checkServiceWorker() {
+      if (!('serviceWorker' in navigator)) {
+        addCheck('swChecks', 'Service workers not supported', 'error');
+        updateStatus('swStatus', 'error', 'Not Supported');
+        return;
+      }
+
+      checks.sw += addCheck('swChecks', 'Service Worker API available', 'success');
+
+      try {
+        const registration = await navigator.serviceWorker.getRegistration();
+
+        if (registration) {
+          checks.sw += addCheck('swChecks', 'Service worker registered', 'success');
+          document.getElementById('swState').textContent = registration.active ? 'Active' : 'Pending';
+          document.getElementById('swScope').textContent = registration.scope;
+
+          if (registration.active) {
+            checks.sw += addCheck('swChecks', 'Service worker is active', 'success');
+          }
+
+          if (registration.waiting) {
+            addCheck('swChecks', 'Update available', 'warning');
+          }
+        } else {
+          addCheck('swChecks', 'Service worker not registered', 'error');
+        }
+
+        updateStatus('swStatus', checks.sw >= 2 ? 'success' : 'warning', checks.sw >= 2 ? 'Active' : 'Issues');
+      } catch (error) {
+        addCheck('swChecks', 'Error checking service worker', 'error');
+        updateStatus('swStatus', 'error', 'Error');
+      }
+    }
+
+    async function checkIcons() {
+      const iconSizes = [72, 96, 128, 144, 152, 192, 384, 512];
+      let successCount = 0;
+
+      for (const size of iconSizes) {
+        try {
+          const response = await fetch(`/icons/icon-${size}x${size}.png`, { method: 'HEAD' });
+          if (response.ok) {
+            successCount++;
+            checks.icons += addCheck('iconChecks', `Icon ${size}x${size} exists`, 'success');
+          } else {
+            addCheck('iconChecks', `Icon ${size}x${size} missing`, 'error');
+          }
+        } catch {
+          addCheck('iconChecks', `Icon ${size}x${size} failed to load`, 'error');
+        }
+      }
+
+      updateStatus('iconsStatus', successCount >= 6 ? 'success' : 'warning', `${successCount}/${iconSizes.length}`);
+    }
+
+    function checkInstallability() {
+      if (window.matchMedia('(display-mode: standalone)').matches) {
+        checks.install += addCheck('installChecks', 'App is already installed', 'success');
+        updateStatus('installStatus', 'success', 'Installed');
+        return;
+      }
+
+      checks.install += addCheck('installChecks', 'HTTPS enabled', location.protocol === 'https:' ? 'success' : 'error');
+      checks.install += addCheck('installChecks', 'Valid manifest', 'success');
+      checks.install += addCheck('installChecks', 'Service worker registered', 'success');
+
+      if (installPrompt) {
+        checks.install += addCheck('installChecks', 'Install prompt available', 'success');
+        document.getElementById('installBtn').disabled = false;
+      } else {
+        addCheck('installChecks', 'Install prompt not available', 'warning');
+      }
+
+      updateStatus('installStatus', checks.install >= 3 ? 'success' : 'warning', 'Installable');
+    }
+
+    async function checkCaching() {
+      if (!('caches' in window)) {
+        addCheck('cacheChecks', 'Cache API not available', 'error');
+        updateStatus('cacheStatus', 'error', 'Not Supported');
+        return;
+      }
+
+      checks.cache += addCheck('cacheChecks', 'Cache API available', 'success');
+
+      const cacheNames = await caches.keys();
+      checks.cache += addCheck('cacheChecks', `${cacheNames.length} cache(s) found`, cacheNames.length > 0 ? 'success' : 'warning');
+
+      let totalSize = 0;
+      let totalCount = 0;
+
+      for (const cacheName of cacheNames) {
+        const cache = await caches.open(cacheName);
+        const keys = await cache.keys();
+        totalCount += keys.length;
+
+        for (const request of keys) {
+          const response = await cache.match(request);
+          if (response) {
+            const blob = await response.blob();
+            totalSize += blob.size;
+          }
+        }
+      }
+
+      document.getElementById('cacheCount').textContent = totalCount;
+      document.getElementById('cacheSize').textContent = formatBytes(totalSize);
+
+      if (totalCount > 0) {
+        checks.cache += addCheck('cacheChecks', `${totalCount} resources cached`, 'success');
+      }
+
+      updateStatus('cacheStatus', checks.cache >= 2 ? 'success' : 'warning', 'Active');
+    }
+
+    function checkNetwork() {
+      const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+
+      document.getElementById('connectionType').textContent = connection?.type || 'Unknown';
+      document.getElementById('effectiveType').textContent = connection?.effectiveType || 'Unknown';
+      document.getElementById('downlink').textContent = connection?.downlink ? `${connection.downlink} Mbps` : 'Unknown';
+      document.getElementById('rtt').textContent = connection?.rtt ? `${connection.rtt} ms` : 'Unknown';
+
+      window.addEventListener('online', () => {
+        updateStatus('networkStatus', 'success', 'Online');
+      });
+
+      window.addEventListener('offline', () => {
+        updateStatus('networkStatus', 'error', 'Offline');
+      });
+    }
+
+    function calculateScore() {
+      const total = checks.manifest + checks.sw + checks.icons + checks.install + checks.cache;
+      const max = 25;
+      const percentage = Math.round((total / max) * 100);
+
+      const scoreEl = document.getElementById('score');
+      scoreEl.textContent = `${percentage}%`;
+
+      if (percentage >= 90) {
+        scoreEl.className = 'score excellent';
+        updateStatus('overallStatus', 'success', 'Excellent');
+      } else if (percentage >= 70) {
+        scoreEl.className = 'score good';
+        updateStatus('overallStatus', 'success', 'Good');
+      } else if (percentage >= 50) {
+        scoreEl.className = 'score fair';
+        updateStatus('overallStatus', 'warning', 'Fair');
+      } else {
+        scoreEl.className = 'score poor';
+        updateStatus('overallStatus', 'error', 'Poor');
+      }
+    }
+
+    async function runAllTests() {
+      checks = { manifest: 0, sw: 0, icons: 0, install: 0, cache: 0 };
+
+      document.querySelectorAll('.check-list').forEach(list => list.innerHTML = '');
+
+      await checkManifest();
+      await checkServiceWorker();
+      await checkIcons();
+      checkInstallability();
+      await checkCaching();
+      checkNetwork();
+      calculateScore();
+    }
+
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      installPrompt = e;
+    });
+
+    document.getElementById('installBtn').addEventListener('click', async () => {
+      if (!installPrompt) return;
+
+      installPrompt.prompt();
+      const result = await installPrompt.userChoice;
+
+      if (result.outcome === 'accepted') {
+        console.log('App installed');
+      }
+
+      installPrompt = null;
+      document.getElementById('installBtn').disabled = true;
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', runAllTests);
+
+    document.getElementById('clearCacheBtn').addEventListener('click', async () => {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map(name => caches.delete(name)));
+      alert('Cache cleared!');
+      runAllTests();
+    });
+
+    runAllTests();
+  </script>
+</body>
+</html>

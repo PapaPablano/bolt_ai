@@ -9,6 +9,8 @@ import { ChartToolbar } from './components/ChartToolbar';
 import { ComparisonMode } from './components/ComparisonMode';
 import { SkipLinks } from './components/SkipLinks';
 import { FocusIndicator } from './components/FocusIndicator';
+import { PWAInstallPrompt } from './components/PWAInstallPrompt';
+import { PWAUpdateNotification } from './components/PWAUpdateNotification';
 import { fetchStockQuote, fetchHistoricalData, type StockQuote, type BarData } from './lib/api';
 import { DrawingManager, type DrawingTool } from './lib/chartDrawings';
 import { useAnnouncement } from './hooks/useFocusManagement';
@@ -90,6 +92,8 @@ function App() {
     <div className="min-h-screen bg-slate-900 text-slate-100">
       <FocusIndicator />
       <SkipLinks />
+      <PWAInstallPrompt />
+      <PWAUpdateNotification />
       <header className="border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm sticky top-0 z-40" role="banner">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between gap-4">

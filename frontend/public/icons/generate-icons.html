@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generate PWA Icons</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #0f172a;
+      color: #f8fafc;
+    }
+    h1 { color: #60a5fa; }
+    .canvas-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 20px;
+      margin: 20px 0;
+    }
+    .canvas-item {
+      text-align: center;
+      padding: 10px;
+      background: #1e293b;
+      border-radius: 8px;
+    }
+    canvas {
+      display: block;
+      margin: 10px auto;
+      border: 1px solid #334155;
+      border-radius: 4px;
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 5px;
+    }
+    button:hover { background: #2563eb; }
+    .info {
+      background: #1e293b;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+      border-left: 4px solid #3b82f6;
+    }
+    code {
+      background: #334155;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+    }
+  </style>
+</head>
+<body>
+  <h1>📱 PWA Icon Generator</h1>
+
+  <div class="info">
+    <p>This tool generates all required PWA icons for Stock Whisperer.</p>
+    <p>Click "Generate All Icons" to create icons, then "Download All" to save them to the <code>/icons</code> folder.</p>
+  </div>
+
+  <button onclick="generateAllIcons()">Generate All Icons</button>
+  <button onclick="downloadAll()">Download All</button>
+
+  <h2>Preview</h2>
+  <div id="canvasContainer" class="canvas-container"></div>
+
+  <script>
+    const sizes = [72, 96, 128, 144, 152, 192, 384, 512];
+    const maskableSizes = [192, 512];
+    const canvases = {};
+
+    function createIcon(size, isMaskable = false) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+
+      const padding = isMaskable ? size * 0.2 : 0;
+      const contentSize = size - (padding * 2);
+
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, size, size);
+
+      const gradient = ctx.createLinearGradient(
+        padding,
+        padding,
+        padding + contentSize,
+        padding + contentSize
+      );
+      gradient.addColorStop(0, '#3b82f6');
+      gradient.addColorStop(1, '#06b6d4');
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.roundRect(
+        padding + contentSize * 0.15,
+        padding + contentSize * 0.15,
+        contentSize * 0.7,
+        contentSize * 0.7,
+        contentSize * 0.1
+      );
+      ctx.fill();
+
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = size * 0.04;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      const centerX = size / 2;
+      const centerY = size / 2;
+      const chartWidth = contentSize * 0.5;
+      const chartHeight = contentSize * 0.35;
+
+      ctx.beginPath();
+      ctx.moveTo(centerX - chartWidth/2, centerY + chartHeight/2);
+      ctx.lineTo(centerX - chartWidth/4, centerY);
+      ctx.lineTo(centerX, centerY + chartHeight/4);
+      ctx.lineTo(centerX + chartWidth/4, centerY - chartHeight/4);
+      ctx.lineTo(centerX + chartWidth/2, centerY + chartHeight/4);
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      [
+        [centerX - chartWidth/2, centerY + chartHeight/2],
+        [centerX - chartWidth/4, centerY],
+        [centerX, centerY + chartHeight/4],
+        [centerX + chartWidth/4, centerY - chartHeight/4],
+        [centerX + chartWidth/2, centerY + chartHeight/4]
+      ].forEach(([x, y]) => {
+        ctx.beginPath();
+        ctx.arc(x, y, size * 0.02, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      return canvas;
+    }
+
+    function generateAllIcons() {
+      const container = document.getElementById('canvasContainer');
+      container.innerHTML = '';
+
+      sizes.forEach(size => {
+        const canvas = createIcon(size);
+        canvases[`icon-${size}x${size}.png`] = canvas;
+
+        const div = document.createElement('div');
+        div.className = 'canvas-item';
+        div.innerHTML = `<div>${size}x${size}</div>`;
+        div.appendChild(canvas);
+        container.appendChild(div);
+      });
+
+      maskableSizes.forEach(size => {
+        const canvas = createIcon(size, true);
+        canvases[`icon-maskable-${size}x${size}.png`] = canvas;
+
+        const div = document.createElement('div');
+        div.className = 'canvas-item';
+        div.innerHTML = `<div>Maskable ${size}x${size}</div>`;
+        div.appendChild(canvas);
+        container.appendChild(div);
+      });
+
+      const shortcutCanvas = createIcon(192);
+      canvases['shortcut-watchlist.png'] = shortcutCanvas;
+      canvases['shortcut-charts.png'] = shortcutCanvas;
+      canvases['shortcut-news.png'] = shortcutCanvas;
+    }
+
+    function downloadAll() {
+      Object.entries(canvases).forEach(([filename, canvas]) => {
+        canvas.toBlob(blob => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+      });
+    }
+
+    window.onload = generateAllIcons;
+  </script>
+</body>
+</html>

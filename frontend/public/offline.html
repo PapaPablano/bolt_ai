@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline - Stock Whisperer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 500px;
+      text-align: center;
+    }
+
+    .icon {
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 30px;
+      background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .icon::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 60%;
+      height: 60%;
+      border: 4px solid #ffffff;
+      border-radius: 12px;
+      border-right-color: transparent;
+      border-top-color: transparent;
+      animation: rotate 1.5s linear infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    @keyframes rotate {
+      from { transform: translate(-50%, -50%) rotate(0deg); }
+      to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+
+    h1 {
+      font-size: 32px;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #60a5fa 0%, #22d3ee 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    p {
+      font-size: 18px;
+      color: #cbd5e1;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+
+    .features {
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(51, 65, 85, 0.6);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 32px;
+      backdrop-filter: blur(10px);
+    }
+
+    .features h2 {
+      font-size: 20px;
+      margin-bottom: 16px;
+      color: #e2e8f0;
+    }
+
+    .features ul {
+      list-style: none;
+      text-align: left;
+    }
+
+    .features li {
+      padding: 8px 0;
+      color: #94a3b8;
+      position: relative;
+      padding-left: 28px;
+    }
+
+    .features li::before {
+      content: '✓';
+      position: absolute;
+      left: 0;
+      color: #22c55e;
+      font-weight: bold;
+      font-size: 18px;
+    }
+
+    .button {
+      display: inline-block;
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+      padding: 14px 32px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+      border: none;
+      font-size: 16px;
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+    }
+
+    .button:active {
+      transform: translateY(0);
+    }
+
+    .status {
+      margin-top: 24px;
+      padding: 12px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 8px;
+      color: #fca5a5;
+      font-size: 14px;
+    }
+
+    .status.checking {
+      background: rgba(59, 130, 246, 0.1);
+      border-color: rgba(59, 130, 246, 0.3);
+      color: #93c5fd;
+    }
+
+    .status.online {
+      background: rgba(34, 197, 94, 0.1);
+      border-color: rgba(34, 197, 94, 0.3);
+      color: #86efac;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon"></div>
+
+    <h1>You're Offline</h1>
+
+    <p>
+      Stock Whisperer needs an internet connection to fetch real-time market data.
+      Please check your connection and try again.
+    </p>
+
+    <div class="features">
+      <h2>Available When Online</h2>
+      <ul>
+        <li>Real-time stock quotes and charts</li>
+        <li>Technical indicators and analysis</li>
+        <li>Market news and insights</li>
+        <li>Stock comparison tools</li>
+        <li>ML-powered pattern detection</li>
+      </ul>
+    </div>
+
+    <button class="button" onclick="checkConnection()">
+      Check Connection
+    </button>
+
+    <div id="status" class="status" style="display: none;">
+      Checking connection...
+    </div>
+  </div>
+
+  <script>
+    function showStatus(message, type = 'offline') {
+      const status = document.getElementById('status');
+      status.textContent = message;
+      status.className = `status ${type}`;
+      status.style.display = 'block';
+    }
+
+    function checkConnection() {
+      showStatus('Checking connection...', 'checking');
+
+      if (navigator.onLine) {
+        showStatus('Connection restored! Redirecting...', 'online');
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1000);
+      } else {
+        showStatus('Still offline. Please check your internet connection.', 'offline');
+      }
+    }
+
+    window.addEventListener('online', () => {
+      showStatus('Connection restored! Redirecting...', 'online');
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 1000);
+    });
+
+    window.addEventListener('offline', () => {
+      showStatus('Connection lost.', 'offline');
+    });
+
+    if (navigator.onLine) {
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 2000);
+    }
+  </script>
+</body>
+</html>
