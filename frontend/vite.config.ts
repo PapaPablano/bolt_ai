@@ -8,7 +8,9 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
   },
   plugins: [
-    react(),
+    react({
+      jsxImportSource: '@emotion/react',
+    }),
   ],
   resolve: {
     alias: {
