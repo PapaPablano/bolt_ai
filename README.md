@@ -11,8 +11,8 @@ Bolt focuses on JavaScript-based web technologies. It supports:
 ## 🚀 Quick Start
 
 ```bash
-# Install all dependencies
-npm run install:all
+# Install all dependencies (frontend included via postinstall)
+npm install
 
 # Set up environment variables
 cp .env.example frontend/.env.local
@@ -115,7 +115,7 @@ See `project/src/supabase/database.ts` for examples of persisting Schwab data ba
 This project has a **multi-package structure** (root + frontend). Common issues:
 
 - **Multiple package managers**: Use **npm only** (not yarn). Both `package-lock.json` and `yarn.lock` exist, but npm is the standard.
-- **Incomplete installation**: Run `npm run install:all` to install both root and frontend dependencies.
+- **Incomplete installation**: Run `npm install` (postinstall automatically installs `frontend/` deps). `npm run install:all` remains available if you prefer the explicit two-step install.
 - **Missing environment variables**: Copy `.env.example` to `frontend/.env.local` and add your Supabase credentials.
 
 **See [SETUP.md](./SETUP.md) for comprehensive troubleshooting guide.**
