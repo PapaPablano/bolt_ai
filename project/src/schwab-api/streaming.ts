@@ -1,5 +1,5 @@
-import { StreamMessage, StreamerCredentials, StreamerEnvelope, StreamerRequest, StreamerService } from './types'
-import { SCHWAB_STREAMER_DEFAULT_HEARTBEAT_MS } from './utils'
+import { StreamMessage, StreamerCredentials, StreamerEnvelope, StreamerRequest, StreamerService } from './types.js'
+import { SCHWAB_STREAMER_DEFAULT_HEARTBEAT_MS } from './utils.js'
 
 export interface WebSocketLike {
   readyState: number

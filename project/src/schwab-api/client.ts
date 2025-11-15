@@ -1,4 +1,4 @@
-import { SchwabOAuth } from './oauth'
+import { SchwabOAuth } from './oauth.js'
 import {
   Candle,
   FutureQuote,
@@ -11,9 +11,9 @@ import {
   Quote,
   StreamerCredentials,
   SchwabRequestOptions,
-} from './types'
-import { SchwabStreamer, SchwabStreamerOptions } from './streaming'
-import { SCHWAB_API_BASE_URL, buildUrl, delay } from './utils'
+} from './types.js'
+import { SchwabStreamer, SchwabStreamerOptions } from './streaming.js'
+import { SCHWAB_API_BASE_URL, buildUrl, delay } from './utils.js'
 
 type FetchLike = typeof fetch
 

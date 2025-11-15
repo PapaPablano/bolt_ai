@@ -1,4 +1,4 @@
-import { OAuthToken, SchwabRequestOptions, TokenResponse } from './types'
+import { OAuthToken, SchwabRequestOptions, TokenResponse } from './types.js'
 
 export const SCHWAB_API_BASE_URL = 'https://api.schwabapi.com/marketdata/v1'
 export const SCHWAB_OAUTH_BASE_URL = 'https://api.schwabapi.com/v1/oauth'

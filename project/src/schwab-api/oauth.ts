@@ -1,11 +1,11 @@
-import { OAuthToken, SchwabConfig, TokenResponse } from './types'
+import { OAuthToken, SchwabConfig, TokenResponse } from './types.js'
 import {
   SCHWAB_OAUTH_BASE_URL,
   buildUrl,
   delay,
   isTokenExpired,
   toOAuthToken,
-} from './utils'
+} from './utils.js'
 
 const AUTHORIZATION_URL = 'https://api.schwabapi.com/v1/oauth/authorize'
 

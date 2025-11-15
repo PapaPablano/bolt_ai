@@ -1,13 +1,9 @@
-import { SchwabConfig } from '../schwab-api/types'
+import { SchwabConfig } from '../schwab-api/types.js'
 
-type PartialEnv = {
-  SCHWAB_CLIENT_ID?: string
-  SCHWAB_CLIENT_SECRET?: string
-  SCHWAB_REDIRECT_URI?: string
-  SCHWAB_SCOPE?: string
-}
+type SchwabEnvKeys = 'SCHWAB_CLIENT_ID' | 'SCHWAB_CLIENT_SECRET' | 'SCHWAB_REDIRECT_URI' | 'SCHWAB_SCOPE'
+type PartialEnv = Pick<NodeJS.ProcessEnv, SchwabEnvKeys>
 
-export function loadSchwabConfig(env: PartialEnv = process.env): SchwabConfig {
+export function loadSchwabConfig(env: PartialEnv = process.env as PartialEnv): SchwabConfig {
   const clientId = env.SCHWAB_CLIENT_ID
   const clientSecret = env.SCHWAB_CLIENT_SECRET
   const redirectUri = env.SCHWAB_REDIRECT_URI

@@ -1,8 +1,17 @@
 import { SupabaseClient } from '@supabase/supabase-js'
-import { Candle, FutureQuote, OptionChain, Quote } from '../schwab-api/types'
+import { Candle, FutureQuote, OptionChain, Quote } from '../schwab-api/types.js'
 
 function toIso(timestamp: number): string {
   return new Date(timestamp).toISOString()
+}
+
+type PriceHistoryRow = {
+  datetime: string | null
+  open_price: number | null
+  high_price: number | null
+  low_price: number | null
+  close_price: number | null
+  volume: number | null
 }
 
 export class MarketDataDB {
@@ -172,8 +181,10 @@ export class MarketDataDB {
       return []
     }
 
-    return data.map((row) => ({
-      datetime: new Date(row.datetime as string).getTime(),
+    const rows = data as PriceHistoryRow[]
+
+    return rows.map((row) => ({
+      datetime: new Date(row.datetime ?? '').getTime(),
       open: Number(row.open_price ?? 0),
       high: Number(row.high_price ?? 0),
       low: Number(row.low_price ?? 0),
