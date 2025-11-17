@@ -32,7 +32,7 @@ export function NewsPanel({ symbol }: NewsPanelProps) {
         });
 
         if (error) throw error;
-        setArticles(data.news || []);
+        setArticles(data.articles || []);
       } catch (error) {
         console.error('Error fetching news:', error);
         setArticles([]);

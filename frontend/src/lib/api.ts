@@ -35,11 +35,12 @@ export async function fetchHistoricalData(
   timeframe: string = '1D'
 ): Promise<BarData[]> {
   const { data, error } = await supabase.functions.invoke('stock-historical-v3', {
-    body: { symbol, timeframe, interval: '1Day' }
+    // Backend expects `range`; keep timeframe string for UI but map to range here if needed.
+    body: { symbol, range: timeframe === '1D' ? '1mo' : timeframe.toLowerCase() }
   });
 
   if (error) throw error;
-  return data.bars || [];
+  return data?.data || [];
 }
 
 interface SchwabQuote {
