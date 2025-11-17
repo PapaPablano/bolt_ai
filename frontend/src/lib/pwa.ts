@@ -49,6 +49,13 @@ export class PWAManager {
   }
 
   async register(): Promise<ServiceWorkerRegistration | null> {
+    // Skip service worker entirely in dev; also clean up any previous registrations.
+    if (import.meta.env.DEV) {
+      await this.unregisterAll();
+      console.info('[PWA] Skipping service worker registration in dev');
+      return null;
+    }
+
     if (!('serviceWorker' in navigator)) {
       console.warn('[PWA] Service workers not supported');
       return null;
@@ -283,6 +290,13 @@ export class PWAManager {
       rtt: connection?.rtt,
       saveData: connection?.saveData
     };
+  }
+
+  // Dev helper: remove any registered SWs (used when skipping SW in dev)
+  private async unregisterAll(): Promise<void> {
+    if (!('serviceWorker' in navigator)) return;
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map((reg) => reg.unregister()));
   }
 }
 
