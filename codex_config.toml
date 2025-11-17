@@ -1,0 +1,8 @@
+model = "gpt-5.1-codex"
+model_reasoning_effort = "high"
+
+[github]
+user = "PapaPablano"
+# To get your token, go to https://github.com/settings/tokens?type=beta
+# and create a new token with the "copilot" scope.
+token = "" # set locally (do not commit secrets)
