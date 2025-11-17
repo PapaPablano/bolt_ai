@@ -454,6 +454,7 @@ Deno.serve(async (req) => {
     const endDate = new Date()
     const startDate = computeRangeStart(range, endDate)
 
+    let planUsed = plan
     const rawBars = await fetchAlpacaBars(
       symbol,
       startDate.toISOString(),
@@ -462,20 +463,38 @@ Deno.serve(async (req) => {
       instrumentType,
     )
 
-    if (!rawBars.length) {
+    let bars = rawBars
+
+    if (!bars.length) {
+      const fallbackPlan: FetchPlan = { timeframe: '1Hour', resultInterval: '1h', requiresAggregation: false }
+      const fallbackStart = shiftDays(startDate, 5)
+      console.log(
+        `Primary intraday fetch returned no data; attempting fallback ${fallbackPlan.timeframe} from ${fallbackStart.toISOString()} to ${endDate.toISOString()}`,
+      )
+      bars = await fetchAlpacaBars(
+        symbol,
+        fallbackStart.toISOString(),
+        endDate.toISOString(),
+        fallbackPlan.timeframe,
+        instrumentType,
+      )
+      planUsed = fallbackPlan
+    }
+
+    if (!bars.length) {
       return new Response(
         JSON.stringify({ error: 'No intraday data available' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
 
-    const normalizedBars = rawBars.map(toNormalizedBar)
+    const normalizedBars = bars.map(toNormalizedBar)
 
     let finalBars: NormalizedBar[]
-    if (plan.requiresAggregation) {
-      const intervalMinutes = INTERVAL_MINUTES.get(plan.resultInterval)
+    if (planUsed.requiresAggregation) {
+      const intervalMinutes = INTERVAL_MINUTES.get(planUsed.resultInterval)
       if (!intervalMinutes) {
-        throw new Error(`Invalid interval for aggregation: ${plan.resultInterval}`)
+        throw new Error(`Invalid interval for aggregation: ${planUsed.resultInterval}`)
       }
       finalBars = aggregateNormalizedBars(normalizedBars, intervalMinutes)
     } else {
@@ -487,15 +506,16 @@ Deno.serve(async (req) => {
 
     const payload: CachePayload = {
       data: intradayData,
-      source: `alpaca:${instrumentType}:${plan.timeframe}`,
-      interval: plan.resultInterval,
+      source: `alpaca:${instrumentType}:${planUsed.timeframe}`,
+      interval: planUsed.resultInterval,
       symbol,
       range,
       cachedAt: new Date().toISOString(),
       instrumentType,
     }
 
-    await writeCache(cacheKey, payload)
+    const cacheWriteKey = cacheKeyFor(symbol, planUsed.resultInterval, range, instrumentType)
+    await writeCache(cacheWriteKey, payload)
 
     return new Response(
       JSON.stringify({
