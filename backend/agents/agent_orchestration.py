@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Any
+from typing import Any
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -9,28 +9,27 @@ from dotenv import load_dotenv
 from langgraph.graph import StateGraph
 from langchain_ollama import ChatOllama
 
-from perplexity import Perplexity  # official client
+try:
+    from perplexity import Perplexity  # official client
+except Exception:
+    Perplexity = None  # type: ignore
 
 
 # -------------------------
 # 1. Environment & Clients
 # -------------------------
 
-# Load .env if present (dev/local)
 load_dotenv()
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:14b")
 
-# Local LLM (free, via Ollama)
 local_llm = ChatOllama(
     model=OLLAMA_MODEL,
     base_url=OLLAMA_BASE_URL,
 )
 
-# Perplexity client (only used when needed)
-# Uses PERPLEXITY_API_KEY env var by default
-px_client = Perplexity()
+px_client = None  # lazy init
 
 
 # -------------------------
@@ -38,54 +37,50 @@ px_client = Perplexity()
 # -------------------------
 
 class AgentState(dict):
-    """
-    Simple shared state for the graph.
-    You can add more fields as needed (e.g. research_results, debug_info, etc.).
-    """
+    """Shared state; extend as needed."""
     pass
 
 
 def worker_node(state: AgentState) -> AgentState:
-    """
-    Basic worker that uses local LLM.
-    Later you can branch: if state["needs_research"] then call Perplexity, etc.
-    """
+    """Core worker that uses the local LLM via Ollama."""
     task = state.get("task", "No task provided.")
-    # Use local Ollama model for reasoning / generation
     resp = local_llm.invoke(task)
     state["result"] = str(resp)
     return state
 
 
 def research_node(state: AgentState) -> AgentState:
-    """
-    Optional node that calls Perplexity for web research.
-    You can call this only when the task actually needs live info.
-    """
+    """Optional node that calls Perplexity for web research."""
+    global px_client
+
     query = state.get("research_query")
     if not query:
         state["research_results"] = "No research_query provided."
         return state
 
-    # Simple example using Perplexity Search API
-    # You can switch to chat/completions models as needed.
-    search_response = px_client.search.create(
-        query=query,
-        max_results=3,
-    )
-    state["research_results"] = search_response
+    if Perplexity is None:
+        state["research_results"] = "Perplexity client not installed; skipping research."
+        return state
+
+    if px_client is None:
+        px_client = Perplexity()
+
+    try:
+        search_response = px_client.search.create(
+            query=query,
+            max_results=3,
+        )
+        state["research_results"] = search_response
+    except Exception as e:
+        state["research_results"] = f"Perplexity error: {e}"
+
     return state
 
 
-# Build a tiny graph: entry -> worker (and optionally research)
 graph_builder = StateGraph(AgentState)
-
 graph_builder.add_node("worker", worker_node)
 graph_builder.add_node("research", research_node)
-
-# For now, just enter at worker; you can add edges & conditions later.
 graph_builder.set_entry_point("worker")
-
 app_graph = graph_builder.compile()
 
 
@@ -112,27 +107,32 @@ api = FastAPI(title="Agent Orchestration API")
 @api.post("/run-agents", response_model=RunAgentsResponse)
 def run_agents(payload: RunAgentsRequest) -> RunAgentsResponse:
     """
-    Main entrypoint your dashboard will call.
-    - Always runs the worker_node (local LLM via Ollama).
-    - Optionally runs a research node using Perplexity if requested.
+    Main entrypoint.
+    - Always runs worker_node (local LLM via Ollama).
+    - Optionally runs research_node using Perplexity if requested.
     """
-
-    # Build initial state
     state: AgentState = AgentState(task=payload.task)
 
-    # If caller wants research, add query and run research node first
-    if payload.use_research and payload.research_query:
+    # Force no research while debugging
+    use_research = False
+    if use_research and payload.research_query:
         state["research_query"] = payload.research_query
         state = research_node(state)
 
-    # Always run LangGraph workflow (currently just worker)
-    final_state = app_graph.invoke(state)
+    print("State before invoking graph:", state)
+    try:
+        final_state = app_graph.invoke(state)
+    except Exception as e:
+        print(f"Error during graph invocation: {e}")
+        final_state = None
+
+    print("Final state after invoking graph:", final_state)
 
     return RunAgentsResponse(
         task=payload.task,
-        result=str(final_state.get("result", "")),
+        result=str(final_state.get("result", "")) if final_state else "",
         research_used=payload.use_research and bool(payload.research_query),
-        research_results=final_state.get("research_results"),
+        research_results=final_state.get("research_results") if final_state else None,
     )
 
 
@@ -142,11 +142,9 @@ def run_agents(payload: RunAgentsRequest) -> RunAgentsResponse:
 
 if __name__ == "__main__":
     import uvicorn
-
-    # Run with:  python agent_orchestration.py
-    uvicorn.run(
-        "agent_orchestration:api",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-    )
+uvicorn.run(
+    "agent_orchestration:api",
+    host="0.0.0.0",
+    port=8002,
+    reload=True,
+)
