@@ -1,3 +1,5 @@
+import { env } from './env';
+import { normalizeBarsPayload } from './bars';
 import { supabase } from './supabase';
 
 export interface StockQuote {
@@ -22,7 +24,8 @@ export interface BarData {
 }
 
 export async function fetchStockQuote(symbol: string): Promise<StockQuote> {
-  const { data, error } = await supabase.functions.invoke('stock-quote', {
+  const quoteFunction = env.quoteFunction || 'stock-quote';
+  const { data, error } = await supabase.functions.invoke(quoteFunction, {
     body: { symbol }
   });
 
@@ -34,13 +37,19 @@ export async function fetchHistoricalData(
   symbol: string,
   timeframe: string = '1D'
 ): Promise<BarData[]> {
-  const { data, error } = await supabase.functions.invoke('stock-historical-v3', {
-    // Backend expects `range`; keep timeframe string for UI but map to range here if needed.
-    body: { symbol, range: timeframe === '1D' ? '1mo' : timeframe.toLowerCase() }
+  const barsFunction = env.barsFunction || 'stock-historical-v3';
+  const { data, error } = await supabase.functions.invoke(barsFunction, {
+    body: {
+      symbol,
+      range: timeframe === '1D' ? '1mo' : timeframe.toLowerCase(),
+      timeframe,
+    }
   });
 
   if (error) throw error;
-  return data?.data || [];
+
+  const normalized = normalizeBarsPayload(data);
+  return normalized;
 }
 
 interface SchwabQuote {

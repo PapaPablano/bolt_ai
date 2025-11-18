@@ -18,6 +18,7 @@ import { ComparePage } from './pages/ComparePage';
 import { ScreenerPage } from './pages/ScreenerPage';
 import { AlertsPage } from './pages/AlertsPage';
 import { PortfolioPage } from './pages/PortfolioPage';
+import { LiveChartDemoPage } from './pages/LiveChartDemoPage';
 import { HelpPage } from './pages/HelpPage';
 import { HelpGettingStartedPage } from './pages/help/GettingStartedPage';
 import { HelpIndicatorsPage } from './pages/help/IndicatorsGuidePage';
@@ -137,6 +138,7 @@ function App() {
           <Route path={ROUTES.screener()} element={<ScreenerPage />} />
           <Route path={ROUTES.alerts()} element={<AlertsPage />} />
           <Route path={ROUTES.portfolio()} element={<PortfolioPage />} />
+          <Route path={ROUTES.liveChartDemo()} element={<LiveChartDemoPage />} />
           <Route path={ROUTES.help()} element={<HelpPage />} />
           <Route path={ROUTES.helpGettingStarted()} element={<HelpGettingStartedPage />} />
           <Route path={ROUTES.helpIndicators()} element={<HelpIndicatorsPage />} />

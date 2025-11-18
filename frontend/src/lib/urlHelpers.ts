@@ -168,6 +168,7 @@ export const ROUTES = {
   alerts: () => '/alerts',
   portfolio: () => '/portfolio',
   settings: () => '/settings',
+  liveChartDemo: () => '/live-chart-demo',
   help: () => '/help',
   helpGettingStarted: () => '/help/getting-started',
   helpIndicators: () => '/help/indicators',
