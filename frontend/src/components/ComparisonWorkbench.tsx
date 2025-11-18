@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X, TrendingUp } from 'lucide-react';
-import { ComparisonChart } from './ComparisonChart';
+import ComparisonChart from './ComparisonChart';
 import { SearchBar } from './SearchBar';
 import { fetchHistoricalData } from '../lib/api';
 import { useAnnouncement } from '../hooks/useFocusManagement';
@@ -27,16 +27,20 @@ export function ComparisonWorkbench({
   variant = 'page',
   description = 'Add up to five symbols to compare normalized performance side-by-side.',
 }: ComparisonWorkbenchProps) {
+  // Temporarily disable comparison charts while focusing on main chart debugging.
+  const comparisonDisabled = true;
   const [symbols, setSymbols] = useState<string[]>(() => Array.from(new Set(initialSymbols)).slice(0, maxSymbols));
   const [datasets, setDatasets] = useState<ComparisonDataset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const announce = useAnnouncement();
 
   useEffect(() => {
+    if (comparisonDisabled) return;
     loadData(symbols);
-  }, [symbols]);
+  }, [comparisonDisabled, symbols]);
 
   const loadData = async (currentSymbols: string[]) => {
+    if (comparisonDisabled) return;
     setIsLoading(true);
     try {
       const dataPromises = currentSymbols.map(async (symbol, index) => {
@@ -85,6 +89,16 @@ export function ComparisonWorkbench({
     { label: 'Momentum Screener', to: '/screener?style=momentum' },
     { label: 'Value Screener', to: '/screener?style=value' }
   ], []);
+
+  if (comparisonDisabled) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-200">
+          Comparison view is temporarily paused while we debug the main chart. Thanks for your patience.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

@@ -1,129 +1,93 @@
-import { useEffect, useRef } from 'react';
-import { LineSeries, createChart } from 'lightweight-charts';
-import type { IChartApi, ISeriesApi, LineData, Time } from 'lightweight-charts';
+import { useEffect, useLayoutEffect, useRef } from 'react';
+import * as LWC from 'lightweight-charts';
+import type { ISeriesApi, LineData } from 'lightweight-charts';
 
-interface ComparisonData {
-  symbol: string;
-  data: Array<{ time: string; close: number }>;
-  color: string;
-}
+type SeriesDef = {
+  id: string;
+  name: string;
+  data: { time: number | string | Date; value: number }[];
+  color?: string;
+};
 
-interface ComparisonChartProps {
-  datasets: ComparisonData[];
+type Props = {
   height?: number;
-}
+  series: SeriesDef[];
+  dark?: boolean;
+};
 
-export function ComparisonChart({ datasets, height = 500 }: ComparisonChartProps) {
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+export default function ComparisonChart({ height = 320, series, dark = true }: Props) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<ReturnType<typeof LWC.createChart> | null>(null);
+  const seriesRefs = useRef<Record<string, ISeriesApi<'Line'>>>({});
 
-  useEffect(() => {
-    if (!chartContainerRef.current) return;
+  useLayoutEffect(() => {
+    const el = hostRef.current;
+    if (!el || chartRef.current) return;
 
-    const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
+    const width = Math.max(el.clientWidth || 0, 640);
+    const layout = dark
+      ? { background: { color: '#0b1224' }, textColor: '#cbd5e1' }
+      : { background: { color: '#ffffff' }, textColor: '#111827' };
+
+    const chart = LWC.createChart(el, {
+      width,
       height,
-      layout: {
-        background: { color: '#0f172a' },
-        textColor: '#94a3b8',
-      },
-      grid: {
-        vertLines: { color: '#1e293b' },
-        horzLines: { color: '#1e293b' },
-      },
-      timeScale: {
-        borderColor: '#334155',
-        timeVisible: true,
-      },
-      rightPriceScale: {
-        borderColor: '#334155',
-      },
+      layout,
+      rightPriceScale: { borderVisible: false },
+      timeScale: { secondsVisible: false, timeVisible: true },
     });
 
     chartRef.current = chart;
 
-    const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-        });
-      }
+    const onResize = () => {
+      const w = Math.max(el.clientWidth || 0, 480);
+      chart.applyOptions({ width: w });
     };
-
-    window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', onResize);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', onResize);
       chart.remove();
-      seriesRefs.current.clear();
+      chartRef.current = null;
+      seriesRefs.current = {};
     };
-  }, [height]);
+  }, [height, dark]);
 
   useEffect(() => {
-    if (!chartRef.current || datasets.length === 0) return;
+    const chart = chartRef.current;
+    if (!chart) return;
 
-    seriesRefs.current.forEach((series) => {
-      chartRef.current?.removeSeries(series);
-    });
-    seriesRefs.current.clear();
+    const refs = seriesRefs.current;
+    const present = new Set<string>();
 
-    const normalizedDatasets = normalizeDatasets(datasets);
-
-    normalizedDatasets.forEach((dataset) => {
-      const series = chartRef.current!.addSeries(LineSeries, {
-        color: dataset.color,
-        lineWidth: 2,
-        title: dataset.symbol,
-      });
-
-      const lineData: LineData[] = dataset.data.map((point) => ({
-        time: new Date(point.time).getTime() / 1000 as Time,
-        value: point.close,
+    for (const s of series) {
+      present.add(s.id);
+      if (!refs[s.id]) {
+        refs[s.id] = chart.addLineSeries({
+          lineWidth: 2,
+          priceLineVisible: false,
+          color: s.color,
+          title: s.name,
+        });
+      }
+      const data: LineData[] = s.data.map((d) => ({
+        time: typeof d.time === 'number' ? d.time : Math.floor(new Date(d.time).getTime() / 1000),
+        value: d.value,
       }));
+      refs[s.id].setData(data);
+    }
 
-      series.setData(lineData);
-      seriesRefs.current.set(dataset.symbol, series);
-    });
+    // Remove stale series
+    for (const id of Object.keys(refs)) {
+      if (!present.has(id)) {
+        // @ts-expect-error remove not typed on series; exists at runtime
+        refs[id].remove?.();
+        delete refs[id];
+      }
+    }
 
-    chartRef.current.timeScale().fitContent();
-  }, [datasets]);
+    chart.timeScale().fitContent();
+  }, [series]);
 
-  return (
-    <div className="relative">
-      <div ref={chartContainerRef} />
-      {datasets.length > 0 && (
-        <div className="absolute top-4 left-4 bg-slate-800/80 backdrop-blur-sm rounded-lg p-3 border border-slate-700">
-          <div className="space-y-1">
-            {datasets.map((dataset) => (
-              <div key={dataset.symbol} className="flex items-center gap-2 text-sm">
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: dataset.color }}
-                />
-                <span className="text-slate-200 font-medium">{dataset.symbol}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function normalizeDatasets(datasets: ComparisonData[]): ComparisonData[] {
-  return datasets.map((dataset) => {
-    if (dataset.data.length === 0) return dataset;
-
-    const firstValue = dataset.data[0].close;
-    const normalized = dataset.data.map((point) => ({
-      time: point.time,
-      close: (point.close / firstValue) * 100,
-    }));
-
-    return {
-      ...dataset,
-      data: normalized,
-    };
-  });
+  return <div ref={hostRef} style={{ width: '100%', height }} />;
 }

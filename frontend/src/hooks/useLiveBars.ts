@@ -1,81 +1,72 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { env } from '@/lib/env';
-import { isValidSymbol, normalizeSymbol } from '@/lib/symbols';
 import type { Bar } from '@/types/bars';
 
 type LiveOptions = { throttleMs?: number; pollMs?: number };
+const DEFAULTS: LiveOptions = { throttleMs: 250, pollMs: 1000 };
 
-const DEFAULTS = { throttleMs: 300, pollMs: 1000 } as const;
+const TF_TO_SEC: Record<string, number> = {
+  '1Min': 60,
+  '5Min': 300,
+  '10Min': 600,
+  '15Min': 900,
+  '1Hour': 3600,
+  '4Hour': 14_400,
+  '1Day': 86_400,
+};
 
-export function useLiveBars(symbol: string, timeframe: string, opts: LiveOptions = {}) {
+const tfToBucketSec = (tf: string) => TF_TO_SEC[tf] ?? 60;
+const alignToBucketStartSec = (tsSec: number, bucketSec: number) => Math.floor(tsSec / bucketSec) * bucketSec;
+const toIso = (sec: number) => new Date(sec * 1000).toISOString();
+
+export function useLiveBars(symbol: string, timeframe: string, opts: LiveOptions = DEFAULTS) {
   const [bar, setBar] = useState<Bar | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const throttleMs = opts.throttleMs ?? DEFAULTS.throttleMs;
-  const pollMs = opts.pollMs ?? DEFAULTS.pollMs;
-  const throttledSet = useThrottle<Bar | null>(setBar, throttleMs);
+  const throttleRef = useRef<number | null>(null);
+
+  const push = (b: Bar) => {
+    if (throttleRef.current) window.clearTimeout(throttleRef.current);
+    throttleRef.current = window.setTimeout(() => setBar(b), opts.throttleMs ?? DEFAULTS.throttleMs!) as unknown as number;
+  };
 
   useEffect(() => {
-    const normalizedSymbol = normalizeSymbol(symbol);
-    if (!isValidSymbol(normalizedSymbol)) return;
-
     let cancelled = false;
-    throttledSet(null);
-    const { baseTf, aggMinutes } = baseTimeframe(timeframe);
+    setBar(null);
 
+    const bucketSec = tfToBucketSec(timeframe);
+
+    // --- Prefer WS via your secure proxy -----------------------------------
     if (env.alpacaWsUrl) {
       try {
         const ws = new WebSocket(env.alpacaWsUrl);
         wsRef.current = ws;
-
         ws.addEventListener('open', () => {
-          ws.send(JSON.stringify({ action: 'subscribe', symbols: [normalizedSymbol], type: 'bars', timeframe: baseTf }));
+          ws.send(JSON.stringify({ action: 'subscribe', symbols: [symbol], type: 'bars', timeframe }));
         });
-
-        let cur: Bar | null = null;
-        let lastBucket = '';
         ws.addEventListener('message', (ev) => {
           if (cancelled) return;
           try {
-            const msg = JSON.parse(ev.data);
-            if (!msg || msg.time === undefined || msg.open === undefined) return;
-            const src: Bar = {
-              time: typeof msg.time === 'number' ? new Date(msg.time * 1000).toISOString() : msg.time,
-              open: msg.open,
-              high: msg.high,
-              low: msg.low,
-              close: msg.close,
-              volume: msg.volume ?? msg.v ?? 0,
-            };
-            const bucketIso = bucketStartIso(src.time, aggMinutes, baseTf);
-            if (aggMinutes === 0) {
-              throttledSet({ ...src, time: bucketIso });
-              return;
-            }
-
-            if (bucketIso !== lastBucket) {
-              cur = { time: bucketIso, open: src.open, high: src.high, low: src.low, close: src.close, volume: src.volume ?? 0 };
-              lastBucket = bucketIso;
-            } else {
-              cur = {
-                time: bucketIso,
-                open: cur!.open,
-                high: Math.max(cur!.high, src.high),
-                low: Math.min(cur!.low, src.low),
-                close: src.close,
-                volume: (cur!.volume ?? 0) + (src.volume ?? 0),
-              };
-            }
-            throttledSet(cur!);
+            const payload = JSON.parse(ev.data);
+            const t = Date.parse(payload?.time);
+            if (!Number.isFinite(t)) return;
+            const tSec = Math.floor(t / 1000);
+            const aligned = alignToBucketStartSec(tSec, bucketSec);
+            push({
+              time: toIso(aligned),
+              open: Number(payload.open),
+              high: Number(payload.high),
+              low: Number(payload.low),
+              close: Number(payload.close),
+              volume: Number(payload.volume ?? 0),
+            });
           } catch {
             // ignore malformed messages
           }
         });
-
         ws.addEventListener('close', () => {
           wsRef.current = null;
         });
-
         return () => {
           cancelled = true;
           try {
@@ -85,92 +76,54 @@ export function useLiveBars(symbol: string, timeframe: string, opts: LiveOptions
           }
         };
       } catch {
-        // fallback below
+        // fall back to polling
       }
     }
 
-    const quoteFunction = env.quoteFunction || 'stock-quote';
-    let cur: Bar | null = null;
-    let lastBucket = '';
+    // --- Polling fallback: aggregate quote into current bucket --------------
+    let current: Bar | null = null;
+    let lastBucketSec = -1;
+    const quoteFn = env.quoteFunction || 'stock-quote';
 
     const id = window.setInterval(async () => {
       try {
-        const { data, error } = await supabase.functions.invoke(quoteFunction, { body: { symbol: normalizedSymbol } });
+        const { data, error } = await supabase.functions.invoke(quoteFn, { body: { symbol } });
         if (error || !data) return;
-        const last = parseLastPrice(data as Record<string, unknown>);
-        if (!Number.isFinite(last)) return;
+        const px = Number((data as Record<string, unknown>)?.price ?? (data as Record<string, unknown>)?.last ?? (data as Record<string, unknown>)?.close ?? NaN);
+        if (!Number.isFinite(px)) return;
 
-        const nowIso = new Date().toISOString();
-        const bucketIso = bucketStartIso(nowIso, aggMinutes, baseTf);
-        if (aggMinutes === 0) {
-          throttledSet({ time: bucketIso, open: last, high: last, low: last, close: last, volume: 0 });
-          return;
-        }
+        const nowSec = Math.floor(Date.now() / 1000);
+        const bucket = alignToBucketStartSec(nowSec, bucketSec);
 
-        if (bucketIso !== lastBucket) {
-          cur = { time: bucketIso, open: last, high: last, low: last, close: last, volume: 0 };
-          lastBucket = bucketIso;
-        } else {
-          cur = {
-            ...cur!,
-            high: Math.max(cur!.high, last),
-            low: Math.min(cur!.low, last),
-            close: last,
+        if (bucket !== lastBucketSec) {
+          current = { time: toIso(bucket), open: px, high: px, low: px, close: px, volume: 0 };
+          lastBucketSec = bucket;
+        } else if (current) {
+          current = {
+            ...current,
+            high: Math.max(current.high, px),
+            low: Math.min(current.low, px),
+            close: px,
           };
         }
-        throttledSet(cur!);
+
+        if (current) push(current);
       } catch {
-        // ignore transient failures
+        // ignore poll errors
       }
-    }, pollMs);
+    }, opts.pollMs ?? DEFAULTS.pollMs!);
 
     return () => {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [symbol, timeframe, pollMs, throttleMs, throttledSet]);
-
-  return { bar };
-}
-
-function baseTimeframe(tf: string) {
-  if (tf === '10Min') return { baseTf: '1Min', aggMinutes: 10 };
-  if (tf === '4Hour') return { baseTf: '1Hour', aggMinutes: 240 };
-  return { baseTf: tf, aggMinutes: 0 };
-}
-
-function bucketStartIso(iso: string, minutes: number, baseTf?: string) {
-  if (minutes === 0 && baseTf === '1Day') {
-    const d = new Date(iso);
-    d.setUTCHours(0, 0, 0, 0);
-    return d.toISOString();
-  }
-  if (minutes === 0) return iso;
-  const d = new Date(iso);
-  const ms = minutes * 60_000;
-  return new Date(Math.floor(d.getTime() / ms) * ms).toISOString();
-}
-
-function useThrottle<T>(setter: (v: T) => void, ms: number) {
-  const timeout = useRef<number | undefined>();
+  }, [symbol, timeframe, opts.pollMs, opts.throttleMs]);
 
   useEffect(() => {
     return () => {
-      if (timeout.current) window.clearTimeout(timeout.current);
+      if (throttleRef.current) window.clearTimeout(throttleRef.current);
     };
   }, []);
 
-  return useCallback(
-    (value: T) => {
-      if (timeout.current) window.clearTimeout(timeout.current);
-      timeout.current = window.setTimeout(() => setter(value), ms);
-    },
-    [ms, setter],
-  );
+  return { bar };
 }
-
-const parseLastPrice = (data: Record<string, unknown>): number | null => {
-  const value = data?.price ?? data?.last ?? data?.close;
-  const num = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(num) ? num : null;
-};
