@@ -8,23 +8,12 @@ import { useHistoricalBars } from '@/hooks/useHistoricalBars';
 import { useLiveBars } from '@/hooks/useLiveBars';
 import { useProbeToggle } from '@/hooks/useProbeToggle';
 import { sma, ema, bollinger, rsi, toSec } from '@/utils/indicators';
+import { alignNYSEBucketStartSec, tfToBucketSec } from '@/utils/nyseTime';
 import { IndicatorMenu } from './IndicatorMenu';
 import { IntervalBar } from './IntervalBar';
 import { RangeBar } from './RangeBar';
 import { Button } from '@/components/ui/button';
 import ChartProbe from '@/dev/ChartProbe';
-
-const TF_TO_SEC: Record<string, number> = {
-  '1Min': 60,
-  '5Min': 300,
-  '10Min': 600,
-  '15Min': 900,
-  '1Hour': 3600,
-  '4Hour': 14_400,
-  '1Day': 86_400,
-};
-const tfToBucketSec = (tf: string) => TF_TO_SEC[tf] ?? 60;
-const alignToBucketStartSec = (tsSec: number, bucketSec: number) => Math.floor(tsSec / bucketSec) * bucketSec;
 
 type Props = { symbol: string; initialTf?: TF; initialRange?: Range; height?: number };
 
@@ -45,6 +34,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const lastTimeSecRef = useRef<number | null>(null);
   const lastBarRef = useRef<{ time: number; open: number; high: number; low: number; close: number } | null>(null);
   const bucketSizeRef = useRef<number>(tfToBucketSec(tf));
+  const liveAppendRef = useRef<Bar[]>([]);
 
   const { data: history, isLoading, error } = useHistoricalBars(symbol, tf, range);
   const { bar: liveBar } = useLiveBars(symbol, tf);
@@ -78,17 +68,21 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         throw new Error('[LWC] addCandlestickSeries missing — build/import mismatch');
       }
 
-      const cs = chartApi.addCandlestickSeries() as ISeriesApi<'Candlestick'>;
+      const cs = chartApi.addCandlestickSeries?.({
+        lastValueVisible: true,
+        priceLineVisible: true,
+        lastPriceAnimation: 1,
+      }) as ISeriesApi<'Candlestick'>;
       seriesRef.current = cs;
       mainChartRef.current = chart;
 
       overlays.current = {};
-      if (preset.useSMA) overlays.current.sma = chartApi.addLineSeries?.({ lineWidth: 1 }) as ISeriesApi<'Line'>;
-      if (preset.useEMA) overlays.current.ema = chartApi.addLineSeries?.({ lineWidth: 1 }) as ISeriesApi<'Line'>;
+      if (preset.useSMA) overlays.current.sma = chartApi.addLineSeries?.({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true }) as ISeriesApi<'Line'>;
+      if (preset.useEMA) overlays.current.ema = chartApi.addLineSeries?.({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true }) as ISeriesApi<'Line'>;
       if (preset.useBB) {
-        overlays.current.bbu = chartApi.addLineSeries?.({ lineWidth: 1 }) as ISeriesApi<'Line'>;
-        overlays.current.bbm = chartApi.addLineSeries?.({ lineWidth: 1 }) as ISeriesApi<'Line'>;
-        overlays.current.bbl = chartApi.addLineSeries?.({ lineWidth: 1 }) as ISeriesApi<'Line'>;
+        overlays.current.bbu = chartApi.addLineSeries?.({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true }) as ISeriesApi<'Line'>;
+        overlays.current.bbm = chartApi.addLineSeries?.({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true }) as ISeriesApi<'Line'>;
+        overlays.current.bbl = chartApi.addLineSeries?.({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true }) as ISeriesApi<'Line'>;
       }
 
       if (preset.useRSI && rsiRef.current) {
@@ -99,7 +93,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
           layout: { background: { color: '#0b1224' }, textColor: '#cbd5e1' },
         });
         const rchartApi = rchart as unknown as { addLineSeries?: (opts?: unknown) => unknown; applyOptions?: (opts: unknown) => void; remove?: () => void };
-        rsiSeriesRef.current = rchartApi.addLineSeries?.({ lineWidth: 1 }) as ISeriesApi<'Line'>;
+        rsiSeriesRef.current = rchartApi.addLineSeries?.({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true }) as ISeriesApi<'Line'>;
         rsiChartRef.current = rchart;
       }
 
@@ -126,6 +120,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
 
   useEffect(() => {
     if (!history || !seriesRef.current) return;
+    if (!history.length) return;
     const toCandle = (b: Bar) => ({ time: toSec(b.time), open: b.open, high: b.high, low: b.low, close: b.close });
     seriesRef.current.setData(history.map(toCandle));
 
@@ -146,6 +141,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     if (preset.useRSI && rsiChartRef.current) rsiChartRef.current.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
 
     // Seed last-known bar for live handling
+    liveAppendRef.current = [];
     const last = history[lastIdx];
     const tSec = toSec(last.time);
     lastTimeSecRef.current = tSec;
@@ -157,30 +153,24 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     bucketSizeRef.current = tfToBucketSec(tf);
     lastTimeSecRef.current = null;
     lastBarRef.current = null;
+    liveAppendRef.current = [];
   }, [tf]);
 
   useEffect(() => {
     if (!liveBar || !seriesRef.current) return;
 
     const bucketSec = bucketSizeRef.current;
-    const tSecAligned = alignToBucketStartSec(toSec(liveBar.time), bucketSec);
+    const alignedSec = alignNYSEBucketStartSec(toSec(liveBar.time), tf);
+    const alignedIso = new Date(alignedSec * 1000).toISOString();
     const s = seriesRef.current;
     const lastT = lastTimeSecRef.current;
-
-    // No history seeded yet: accept first bar
-    if (lastT == null) {
-      const first = { time: tSecAligned, open: liveBar.open, high: liveBar.high, low: liveBar.low, close: liveBar.close };
-      s.update(first);
-      lastTimeSecRef.current = tSecAligned;
-      lastBarRef.current = first;
-      return;
-    }
+    const calcHistoryBase = history ?? [];
 
     // Ignore stale/out-of-order updates
-    if (tSecAligned < lastT) return;
+    if (lastT !== null && alignedSec < lastT) return;
 
     // Same bucket: merge into current candle
-    if (tSecAligned === lastT) {
+    if (lastT !== null && alignedSec === lastT) {
       const prev = lastBarRef.current!;
       const merged = {
         time: lastT,
@@ -191,27 +181,36 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       };
       s.update(merged);
       lastBarRef.current = merged;
+      if (liveAppendRef.current.length) {
+        const lastIdx = liveAppendRef.current.length - 1;
+        liveAppendRef.current[lastIdx] = { ...liveAppendRef.current[lastIdx], ...merged, time: alignedIso };
+      }
+      updateIndicatorLastPoints(preset, overlays.current, rsiSeriesRef.current, merged, [...calcHistoryBase, ...liveAppendRef.current]);
       return;
     }
 
     // New bucket(s)
-    const prev = lastBarRef.current!;
-    const gapBuckets = Math.floor((tSecAligned - lastT) / bucketSec) - 1;
+    const prev = lastBarRef.current;
+    const gapBuckets = lastT !== null ? Math.floor((alignedSec - lastT) / bucketSec) - 1 : 0;
     const maxBackfill = 5;
 
-    if (gapBuckets > 0 && gapBuckets <= maxBackfill) {
+    if (lastT !== null && prev && gapBuckets > 0 && gapBuckets <= maxBackfill) {
       for (let i = 1; i <= gapBuckets; i++) {
         const ts = lastT + i * bucketSec;
+        const iso = new Date(ts * 1000).toISOString();
         const px = prev.close;
         s.update({ time: ts, open: px, high: px, low: px, close: px });
+        liveAppendRef.current.push({ time: iso, open: px, high: px, low: px, close: px, volume: 0 });
       }
     }
 
-    const next = { time: tSecAligned, open: liveBar.open, high: liveBar.high, low: liveBar.low, close: liveBar.close };
-    s.update(next);
-    lastTimeSecRef.current = tSecAligned;
-    lastBarRef.current = next;
-  }, [liveBar]);
+    const appended = { time: alignedSec, open: liveBar.open, high: liveBar.high, low: liveBar.low, close: liveBar.close };
+    s.update(appended);
+    lastTimeSecRef.current = alignedSec;
+    lastBarRef.current = appended;
+    liveAppendRef.current.push({ ...liveBar, time: alignedIso });
+    updateIndicatorLastPoints(preset, overlays.current, rsiSeriesRef.current, appended, [...calcHistoryBase, ...liveAppendRef.current]);
+  }, [liveBar, tf, history, preset]);
 
   const showOverlay = isLoading || prefsLoading;
 
@@ -248,4 +247,54 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
 function focusWindowCount(tf: TF) {
   const per: Record<TF, number> = { '1Min': 360, '5Min': 72, '10Min': 36, '15Min': 24, '1Hour': 240, '4Hour': 180, '1Day': 250 };
   return per[tf];
+}
+
+type IndicatorPreset = {
+  useSMA: boolean;
+  useEMA: boolean;
+  useBB: boolean;
+  useRSI: boolean;
+  smaPeriod: number;
+  emaPeriod: number;
+  bbPeriod: number;
+  bbMult: number;
+  rsiPeriod: number;
+};
+
+function updateIndicatorLastPoints(
+  preset: IndicatorPreset,
+  ov: { sma?: ISeriesApi<'Line'>; ema?: ISeriesApi<'Line'>; bbu?: ISeriesApi<'Line'>; bbm?: ISeriesApi<'Line'>; bbl?: ISeriesApi<'Line'> },
+  rsiSeries: ISeriesApi<'Line'> | null,
+  _bar: { time: number; open: number; high: number; low: number; close: number },
+  history: Bar[],
+) {
+  const bars = history;
+
+  if (preset.useSMA && ov.sma) {
+    const res = sma(bars, preset.smaPeriod);
+    const last = res[res.length - 1];
+    if (last) ov.sma.update(last);
+  }
+
+  if (preset.useEMA && ov.ema) {
+    const res = ema(bars, preset.emaPeriod);
+    const last = res[res.length - 1];
+    if (last) ov.ema.update(last);
+  }
+
+  if (preset.useBB && ov.bbu && ov.bbm && ov.bbl) {
+    const bb = bollinger(bars, preset.bbPeriod, preset.bbMult);
+    const idx = bb.upper.length - 1;
+    if (idx >= 0) {
+      ov.bbu.update(bb.upper[idx]);
+      ov.bbm.update(bb.middle[idx]);
+      ov.bbl.update(bb.lower[idx]);
+    }
+  }
+
+  if (preset.useRSI && rsiSeries) {
+    const res = rsi(bars, preset.rsiPeriod);
+    const last = res[res.length - 1];
+    if (last) rsiSeries.update(last);
+  }
 }

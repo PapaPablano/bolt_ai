@@ -2,22 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { env } from '@/lib/env';
 import type { Bar } from '@/types/bars';
+import { alignNYSEBucketStartSec } from '@/utils/nyseTime';
 
 type LiveOptions = { throttleMs?: number; pollMs?: number };
 const DEFAULTS: LiveOptions = { throttleMs: 250, pollMs: 1000 };
 
-const TF_TO_SEC: Record<string, number> = {
-  '1Min': 60,
-  '5Min': 300,
-  '10Min': 600,
-  '15Min': 900,
-  '1Hour': 3600,
-  '4Hour': 14_400,
-  '1Day': 86_400,
-};
-
-const tfToBucketSec = (tf: string) => TF_TO_SEC[tf] ?? 60;
-const alignToBucketStartSec = (tsSec: number, bucketSec: number) => Math.floor(tsSec / bucketSec) * bucketSec;
 const toIso = (sec: number) => new Date(sec * 1000).toISOString();
 
 export function useLiveBars(symbol: string, timeframe: string, opts: LiveOptions = DEFAULTS) {
@@ -25,7 +14,7 @@ export function useLiveBars(symbol: string, timeframe: string, opts: LiveOptions
   const wsRef = useRef<WebSocket | null>(null);
   const throttleRef = useRef<number | null>(null);
 
-  const push = (b: Bar) => {
+  const emit = (b: Bar) => {
     if (throttleRef.current) window.clearTimeout(throttleRef.current);
     throttleRef.current = window.setTimeout(() => setBar(b), opts.throttleMs ?? DEFAULTS.throttleMs!) as unknown as number;
   };
@@ -33,8 +22,6 @@ export function useLiveBars(symbol: string, timeframe: string, opts: LiveOptions
   useEffect(() => {
     let cancelled = false;
     setBar(null);
-
-    const bucketSec = tfToBucketSec(timeframe);
 
     // --- Prefer WS via your secure proxy -----------------------------------
     if (env.alpacaWsUrl) {
@@ -48,11 +35,10 @@ export function useLiveBars(symbol: string, timeframe: string, opts: LiveOptions
           if (cancelled) return;
           try {
             const payload = JSON.parse(ev.data);
-            const t = Date.parse(payload?.time);
-            if (!Number.isFinite(t)) return;
-            const tSec = Math.floor(t / 1000);
-            const aligned = alignToBucketStartSec(tSec, bucketSec);
-            push({
+            const tMs = Date.parse(payload?.time);
+            if (!Number.isFinite(tMs)) return;
+            const aligned = alignNYSEBucketStartSec(Math.floor(tMs / 1000), timeframe);
+            emit({
               time: toIso(aligned),
               open: Number(payload.open),
               high: Number(payload.high),
@@ -93,11 +79,11 @@ export function useLiveBars(symbol: string, timeframe: string, opts: LiveOptions
         if (!Number.isFinite(px)) return;
 
         const nowSec = Math.floor(Date.now() / 1000);
-        const bucket = alignToBucketStartSec(nowSec, bucketSec);
+        const aligned = alignNYSEBucketStartSec(nowSec, timeframe);
 
-        if (bucket !== lastBucketSec) {
-          current = { time: toIso(bucket), open: px, high: px, low: px, close: px, volume: 0 };
-          lastBucketSec = bucket;
+        if (aligned !== lastBucketSec) {
+          current = { time: toIso(aligned), open: px, high: px, low: px, close: px, volume: 0 };
+          lastBucketSec = aligned;
         } else if (current) {
           current = {
             ...current,
@@ -107,7 +93,7 @@ export function useLiveBars(symbol: string, timeframe: string, opts: LiveOptions
           };
         }
 
-        if (current) push(current);
+        if (current) emit(current);
       } catch {
         // ignore poll errors
       }
