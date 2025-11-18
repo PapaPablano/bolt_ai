@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { createChart, type IChartApi, type ISeriesApi, type CandlestickData, type Time } from 'lightweight-charts';
+import { CandlestickSeries, createChart } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, CandlestickData, Time } from 'lightweight-charts';
 import { type BarData } from '../lib/api';
 
 interface TradingChartProps {
@@ -33,7 +34,7 @@ export function TradingChart({ data, symbol, height = 600 }: TradingChartProps) 
       },
     });
 
-    const candlestickSeries = chart.addCandlestickSeries({
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#22c55e',
       downColor: '#ef4444',
       borderUpColor: '#22c55e',

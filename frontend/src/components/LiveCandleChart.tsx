@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { createChart, type ISeriesApi } from 'lightweight-charts';
+import { CandlestickSeries, createChart } from 'lightweight-charts';
+import type { ISeriesApi } from 'lightweight-charts';
 import { useHistoricalBars } from '@/hooks/useHistoricalBars';
 import { useLiveBars } from '@/hooks/useLiveBars';
 import type { Bar } from '@/types/bars';
@@ -42,7 +43,7 @@ export function LiveCandleChart({
         textColor: '#cbd5e1',
       },
     });
-    const series = chart.addCandlestickSeries({
+    const series = chart.addSeries(CandlestickSeries, {
       upColor: '#22c55e',
       downColor: '#ef4444',
       borderUpColor: '#22c55e',

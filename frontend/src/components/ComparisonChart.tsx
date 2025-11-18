@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { createChart, type IChartApi, type ISeriesApi, type LineData, type Time } from 'lightweight-charts';
+import { LineSeries, createChart } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, LineData, Time } from 'lightweight-charts';
 
 interface ComparisonData {
   symbol: string;
@@ -70,7 +71,7 @@ export function ComparisonChart({ datasets, height = 500 }: ComparisonChartProps
     const normalizedDatasets = normalizeDatasets(datasets);
 
     normalizedDatasets.forEach((dataset) => {
-      const series = chartRef.current!.addLineSeries({
+      const series = chartRef.current!.addSeries(LineSeries, {
         color: dataset.color,
         lineWidth: 2,
         title: dataset.symbol,

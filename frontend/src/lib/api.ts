@@ -38,10 +38,22 @@ export async function fetchHistoricalData(
   timeframe: string = '1D'
 ): Promise<BarData[]> {
   const barsFunction = env.barsFunction || 'stock-historical-v3';
+
+  const rangeMap: Record<string, string> = {
+    '1D': '1d',
+    '5D': '5d',
+    '1M': '1mo',
+    '3M': '3mo',
+    '6M': '6mo',
+    '1Y': '1y',
+    '5Y': '5y',
+  };
+  const range = rangeMap[timeframe.toUpperCase()] ?? '1mo';
+
   const { data, error } = await supabase.functions.invoke(barsFunction, {
     body: {
       symbol,
-      range: timeframe === '1D' ? '1mo' : timeframe.toLowerCase(),
+      range,
       timeframe,
     }
   });

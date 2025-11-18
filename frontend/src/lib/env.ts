@@ -1,7 +1,7 @@
 export const env = {
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL as string,
   supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
-  barsFunction: (import.meta.env.VITE_BARS_FUNCTION as string) || 'get-bars',
+  barsFunction: (import.meta.env.VITE_BARS_FUNCTION as string) || 'stock-historical-v3',
   quoteFunction: (import.meta.env.VITE_QUOTE_FUNCTION as string) || 'stock-quote',
   defaultSymbol: (import.meta.env.VITE_DEFAULT_SYMBOL as string) || 'AAPL',
   defaultTimeframe: (import.meta.env.VITE_DEFAULT_TIMEFRAME as string) || '1Min',
