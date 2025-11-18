@@ -7,7 +7,7 @@ import type { Bar } from '@/types/bars';
 
 type Props = {
   symbol: string;
-  timeframe?: '1Min' | '5Min' | '15Min' | '1Hour' | '1Day';
+  timeframe?: '1Min' | '5Min' | '10Min' | '15Min' | '1Hour' | '4Hour' | '1Day';
   range?: string;
   height?: number;
 };
@@ -23,7 +23,7 @@ const toPoint = (bar: Bar) => ({
 export function LiveCandleChart({
   symbol,
   timeframe = '1Min',
-  range = '5D',
+  range = '6M',
   height = 480,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
