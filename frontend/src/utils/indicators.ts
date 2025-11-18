@@ -1,6 +1,6 @@
 import type { Bar } from '@/types/bars';
 
-const toSeconds = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
+export const toSec = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
 
 export function sma(bars: Bar[], period: number): { time: number; value: number }[] {
   const out: { time: number; value: number }[] = [];
@@ -16,7 +16,7 @@ export function sma(bars: Bar[], period: number): { time: number; value: number 
       sum -= queue.shift()!;
     }
     if (queue.length === period) {
-      out.push({ time: toSeconds(bars[i].time), value: +(sum / period).toFixed(5) });
+      out.push({ time: toSec(bars[i].time), value: +(sum / period).toFixed(5) });
     }
   }
   return out;
@@ -32,7 +32,7 @@ export function ema(bars: Bar[], period: number): { time: number; value: number 
     const value = prev === undefined ? close : (close - prev) * k + prev;
     prev = value;
     if (i >= period - 1) {
-      out.push({ time: toSeconds(bars[i].time), value: +value.toFixed(5) });
+      out.push({ time: toSec(bars[i].time), value: +value.toFixed(5) });
     }
   }
   return out;
@@ -63,7 +63,7 @@ export function bollinger(bars: Bar[], period: number, mult: number) {
       const mean = sum / period;
       const variance = sumSq / period - mean * mean;
       const sd = Math.sqrt(Math.max(variance, 0));
-      const time = toSeconds(bars[i].time);
+      const time = toSec(bars[i].time);
       middle.push({ time, value: +mean.toFixed(5) });
       upper.push({ time, value: +(mean + mult * sd).toFixed(5) });
       lower.push({ time, value: +(mean - mult * sd).toFixed(5) });
@@ -98,7 +98,7 @@ export function rsi(bars: Bar[], period: number) {
 
     const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
     const value = avgLoss === 0 ? 100 : 100 - 100 / (1 + rs);
-    out.push({ time: toSeconds(bars[i].time), value: +value.toFixed(2) });
+    out.push({ time: toSec(bars[i].time), value: +value.toFixed(2) });
   }
 
   return out;

@@ -1,6 +1,7 @@
 import { env } from './env';
 import { normalizeBarsPayload } from './bars';
 import { supabase } from './supabase';
+import { isValidSymbol, normalizeSymbol } from './symbols';
 
 export interface StockQuote {
   symbol: string;
@@ -33,35 +34,52 @@ export async function fetchStockQuote(symbol: string): Promise<StockQuote> {
   return data;
 }
 
-export async function fetchHistoricalData(
-  symbol: string,
-  timeframe: string = '1D'
-): Promise<BarData[]> {
-  const barsFunction = env.barsFunction || 'stock-historical-v3';
+export async function fetchHistoricalData(symbol: string, timeframe: string = '1D'): Promise<BarData[]> {
+  const barsFunction = env.barsFunction || 'get-bars';
+  const normalizedSymbol = normalizeSymbol(symbol);
+  if (!isValidSymbol(normalizedSymbol)) {
+    throw new Error('Invalid symbol');
+  }
 
-  const rangeMap: Record<string, string> = {
-    '1D': '1d',
-    '5D': '5d',
-    '1M': '1mo',
-    '3M': '3mo',
-    '6M': '6mo',
-    '1Y': '1y',
-    '5Y': '5y',
-  };
-  const range = rangeMap[timeframe.toUpperCase()] ?? '1mo';
+  const upper = timeframe.toUpperCase();
+  const now = new Date();
+  const nowIso = now.toISOString();
 
-  const { data, error } = await supabase.functions.invoke(barsFunction, {
-    body: {
-      symbol,
-      range,
-      timeframe,
+  // Map UI selections (which represent range) into API shape.
+  // Short ranges use intraday bars; longer ranges use daily bars.
+  let body: Record<string, unknown> = { symbol: normalizedSymbol, range: '6M', timeframe: '1Day' };
+
+  switch (upper) {
+    case '1D': {
+      const start = new Date(now.getTime() - 2 * 86_400_000).toISOString();
+      body = { symbol: normalizedSymbol, timeframe: '5Min', start, end: nowIso };
+      break;
     }
-  });
+    case '5D': {
+      const start = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+      body = { symbol: normalizedSymbol, timeframe: '15Min', start, end: nowIso };
+      break;
+    }
+    case '1M':
+    case '3M':
+    case '6M':
+    case '1Y':
+    case '2Y':
+    case '5Y':
+    case '10Y':
+    case 'MAX': {
+      body = { symbol: normalizedSymbol, timeframe: '1Day', range: upper };
+      break;
+    }
+    default: {
+      body = { symbol: normalizedSymbol, timeframe: '1Day', range: '6M' };
+    }
+  }
+
+  const { data, error } = await supabase.functions.invoke(barsFunction, { body });
 
   if (error) throw error;
-
-  const normalized = normalizeBarsPayload(data);
-  return normalized;
+  return normalizeBarsPayload(data);
 }
 
 interface SchwabQuote {

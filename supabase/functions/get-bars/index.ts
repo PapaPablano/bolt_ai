@@ -3,6 +3,7 @@ import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-application-name",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 const ALLOWED_SYMBOL_REGEX = new RegExp(Deno.env.get("APP_ALLOWED_SYMBOL_REGEX") ?? "^[A-Z.\\-]{1,10}$");

@@ -1,20 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GitCompare } from 'lucide-react';
-import { TradingChart } from '../components/TradingChart';
 import { StockCard } from '../components/StockCard';
 import { NewsPanel } from '../components/NewsPanel';
-import { TimeframeSelector } from '../components/TimeframeSelector';
 import { PatternDetector } from '../components/PatternDetector';
-import { ChartToolbar } from '../components/ChartToolbar';
 import { ComparisonMode } from '../components/ComparisonMode';
 import { RelatedStocks } from '../components/RelatedStocks';
 import { TrendingStocks } from '../components/TrendingStocks';
-import { fetchStockQuote, fetchHistoricalData, type StockQuote, type BarData } from '../lib/api';
+import { fetchStockQuote, type StockQuote, type BarData } from '../lib/api';
 import { updateMetaTags, generateStockMetadata } from '../lib/seo';
 import { URLBuilder, ROUTES } from '../lib/urlHelpers';
 import { useAnnouncement } from '../hooks/useFocusManagement';
-import { DrawingManager, type DrawingTool } from '../lib/chartDrawings';
 import { InternalLink } from '../components/InternalLink';
+import AdvancedCandleChart from '../components/AdvancedCandleChart';
+import { useHistoricalBars } from '@/hooks/useHistoricalBars';
+import { useChartPrefs } from '@/hooks/useChartPrefs';
 
 const DEFAULT_SYMBOLS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA'];
 
@@ -36,11 +35,12 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
   const [quotes, setQuotes] = useState<Record<string, StockQuote>>({});
   const [chartData, setChartData] = useState<BarData[]>([]);
   const [isLoadingChart, setIsLoadingChart] = useState(false);
-  const [timeframe, setTimeframe] = useState('1M');
   const [showComparison, setShowComparison] = useState(false);
-  const [drawingManager] = useState(() => new DrawingManager());
-  const [activeTool, setActiveTool] = useState<DrawingTool>('cursor');
   const announce = useAnnouncement();
+  const { prefs, loading: prefsLoading } = useChartPrefs();
+  const tf = prefs.default_timeframe;
+  const range = prefs.default_range;
+  const { data: histBars, isLoading: barsLoading } = useHistoricalBars(selectedSymbol, tf, range);
 
   useEffect(() => {
     const loadWatchlist = async () => {
@@ -71,21 +71,13 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
   }, []);
 
   useEffect(() => {
-    const loadChartData = async () => {
-      setIsLoadingChart(true);
-      try {
-        const data = await fetchHistoricalData(selectedSymbol, timeframe);
-        setChartData(data);
-      } catch (error) {
-        console.error('Error loading chart data:', error);
-        setChartData([]);
-      } finally {
-        setIsLoadingChart(false);
-      }
-    };
-
-    loadChartData();
-  }, [selectedSymbol, timeframe]);
+    if (histBars) {
+      setChartData(histBars);
+      setIsLoadingChart(false);
+    } else {
+      setIsLoadingChart(barsLoading || prefsLoading);
+    }
+  }, [histBars, barsLoading, prefsLoading]);
 
   const currentDetails = useMemo(
     () => STOCK_DETAILS[selectedSymbol] || { name: `${selectedSymbol} Stock`, sector: 'Markets' },
@@ -102,15 +94,6 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
   const handleSymbolSelect = (symbol: string) => {
     onSymbolChange(symbol, { navigate: true });
     announce(`Selected ${symbol}. Loading chart data.`, 'polite');
-  };
-
-  const handleToolChange = (tool: DrawingTool) => {
-    setActiveTool(tool);
-    drawingManager.setActiveTool(tool);
-  };
-
-  const handleClearDrawings = () => {
-    drawingManager.clearDrawings();
   };
 
   const relatedStocks = useMemo(() => {
@@ -202,7 +185,6 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
             )}
           </div>
           <div className="flex items-center gap-4">
-            <TimeframeSelector selected={timeframe} onChange={setTimeframe} />
             <button
               onClick={() => setShowComparison(true)}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
@@ -222,19 +204,12 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           <div className="lg:col-span-2">
-            <div className="mb-4">
-              <ChartToolbar
-                activeTool={activeTool}
-                onToolChange={handleToolChange}
-                onClearDrawings={handleClearDrawings}
-              />
-            </div>
             {isLoadingChart ? (
               <div className="bg-slate-800/50 border border-slate-700 rounded-lg h-[600px] flex items-center justify-center">
                 <div className="text-slate-400">Loading chart...</div>
               </div>
             ) : chartData.length > 0 ? (
-              <TradingChart data={chartData} symbol={selectedSymbol} />
+              <AdvancedCandleChart symbol={selectedSymbol} initialTf={tf} initialRange={range} height={600} />
             ) : (
               <div className="bg-slate-800/50 border border-slate-700 rounded-lg h-[600px] flex items-center justify-center">
                 <div className="text-slate-400">No chart data available</div>
