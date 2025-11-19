@@ -50,6 +50,7 @@ export function createTvStreamAggregator(tf: TF, onRealtimeCallback: RealtimeCal
       const flat: Bar = { time: fill * 1000, open: px, high: px, low: px, close: px, volume: 0 };
       emit(flat);
       lastStart = fill;
+      fill += step;
     }
   };
 

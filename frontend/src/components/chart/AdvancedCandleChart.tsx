@@ -7,6 +7,7 @@ import { useChartPrefs } from '@/hooks/useChartPrefs';
 import { useHistoricalBars } from '@/hooks/useHistoricalBars';
 import { useLiveBars } from '@/hooks/useLiveBars';
 import { useProbeToggle } from '@/hooks/useProbeToggle';
+import { useIndicatorWorker } from '@/hooks/useIndicatorWorker';
 import { sma, ema, bollinger, rsi } from '@/utils/indicators';
 import { normalizeHistoricalBars, type Bar as ChartBar } from '@/utils/bars';
 import { alignNYSEBucketStartUtcSec, bucketSec, toSec } from '@/utils/nyseTime';
@@ -15,6 +16,8 @@ import { supertrendAiSeries, supertrendAiStep, type StAiState } from '@/utils/in
 import { vwapSeries, vwapStep, vwapInit, type VwapState, macdSeries, macdInit, macdStep, type MacdState } from '@/utils/indicators-core';
 import { supertrendPerfSeries, supertrendPerfStep, type StPerfParams, type StPerfState } from '@/utils/indicators-supertrend-perf';
 import { assertBucketInvariant } from '@/utils/devInvariants';
+import type { IndicatorWorkerName, IndicatorWorkerParams } from '@/lib/indicators';
+import { decimateForVisibleRange } from '@/utils/lttb';
 import { ChartProbe } from './ChartProbe';
 import { IndicatorMenu } from './IndicatorMenu';
 import { IntervalBar } from './IntervalBar';
@@ -27,6 +30,7 @@ type ProbeState = { ok: boolean; error?: string; lastEvent?: string };
 const envVars = import.meta.env as Record<string, string | undefined>;
 const tvFlag = (envVars.VITE_CHART_VENDOR ?? envVars.VITE_USE_TRADINGVIEW ?? '').toLowerCase();
 const USING_TV = tvFlag === 'tradingview' || tvFlag === 'true';
+const MAX_RENDERED_CANDLES = 5000;
 
 export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initialRange = '1Y', height = 520 }: Props) {
   const { enabled: probeEnabled } = useProbeToggle();
@@ -80,6 +84,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
 
   const { data: history, isLoading, error } = useHistoricalBars(symbol, tf, range);
   const { bar: liveBar } = useLiveBars(symbol, tf);
+  const { indicators: workerIndicators, calculate: calculateIndicators } = useIndicatorWorker();
 
   const isChartLoading = isLoading || prefsLoading;
   const auxPanelHeight = (preset.useMACD ? 180 : 0) + (preset.useRSI ? 140 : 0);
@@ -245,24 +250,43 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     });
     const normalized = normalizeHistoricalBars(cleaned.map(toChartBar), tf);
     seedBarsRef.current = normalized;
-    candleRef.current.setData(mapBarsForChart(normalized));
+
+    const rangeForDecimation =
+      normalized.length > 0 ? { from: normalized[0].time, to: normalized[normalized.length - 1].time } : null;
+    const renderable = rangeForDecimation
+      ? decimateForVisibleRange(normalized, rangeForDecimation, MAX_RENDERED_CANDLES)
+      : normalized;
+    candleRef.current.setData(mapBarsForChart(renderable));
 
     const last = normalized[normalized.length - 1] ?? null;
     lastTimeSecRef.current = last?.time ?? null;
     lastBarRef.current = last;
 
-    if (preset.useSMA && overlays.current.sma)
-      overlays.current.sma.setData(mapPointsForChart(sma(normalized, preset.smaPeriod)));
-    if (preset.useEMA && overlays.current.ema)
-      overlays.current.ema.setData(mapPointsForChart(ema(normalized, preset.emaPeriod)));
-    if (preset.useBB && overlays.current.bbu && overlays.current.bbm && overlays.current.bbl) {
-      const bb = bollinger(normalized, preset.bbPeriod, preset.bbMult);
-      overlays.current.bbu.setData(mapPointsForChart(bb.upper));
-      overlays.current.bbm.setData(mapPointsForChart(bb.middle));
-      overlays.current.bbl.setData(mapPointsForChart(bb.lower));
+    const indicatorNames: IndicatorWorkerName[] = [];
+    const indicatorParams: IndicatorWorkerParams = {};
+
+    if (preset.useSMA && overlays.current.sma) {
+      indicatorNames.push('sma');
+      indicatorParams.sma = { period: preset.smaPeriod };
     }
-    if (preset.useRSI && rsiSeriesRef.current)
-      rsiSeriesRef.current.setData(mapPointsForChart(rsi(normalized, preset.rsiPeriod)));
+    if (preset.useEMA && overlays.current.ema) {
+      indicatorNames.push('ema');
+      indicatorParams.ema = { period: preset.emaPeriod };
+    }
+    if (preset.useBB && overlays.current.bbu && overlays.current.bbm && overlays.current.bbl) {
+      indicatorNames.push('bollinger');
+      indicatorParams.bollinger = { period: preset.bbPeriod, mult: preset.bbMult };
+    }
+    if (preset.useRSI && rsiSeriesRef.current) {
+      indicatorNames.push('rsi');
+      indicatorParams.rsi = { period: preset.rsiPeriod };
+    }
+
+    if (indicatorNames.length) {
+      calculateIndicators(normalized, indicatorNames, indicatorParams);
+    } else {
+      calculateIndicators([], []);
+    }
 
     const candles = normalized.map((b) => toCandle(b));
     if (preset.useSTAI && overlays.current.stai) {
@@ -319,7 +343,26 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     chartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
     macdChartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
     rsiChartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
-  }, [history, tf, preset]);
+  }, [history, tf, preset, calculateIndicators]);
+
+  useEffect(() => {
+    if (!workerIndicators) return;
+
+    if (workerIndicators.sma && preset.useSMA && overlays.current.sma) {
+      overlays.current.sma.setData(mapPointsForChart(workerIndicators.sma));
+    }
+    if (workerIndicators.ema && preset.useEMA && overlays.current.ema) {
+      overlays.current.ema.setData(mapPointsForChart(workerIndicators.ema));
+    }
+    if (workerIndicators.bollinger && preset.useBB && overlays.current.bbu && overlays.current.bbm && overlays.current.bbl) {
+      overlays.current.bbu.setData(mapPointsForChart(workerIndicators.bollinger.upper));
+      overlays.current.bbm.setData(mapPointsForChart(workerIndicators.bollinger.middle));
+      overlays.current.bbl.setData(mapPointsForChart(workerIndicators.bollinger.lower));
+    }
+    if (workerIndicators.rsi && preset.useRSI && rsiSeriesRef.current) {
+      rsiSeriesRef.current.setData(mapPointsForChart(workerIndicators.rsi));
+    }
+  }, [workerIndicators, preset]);
 
   useEffect(() => {
     lastTimeSecRef.current = null;
