@@ -2,14 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { env } from '@/lib/env';
 import type { Bar } from '@/types/bars';
-import { alignNYSEBucketStartSec } from '@/utils/nyseTime';
+import type { TF } from '@/types/prefs';
+import { alignNYSEBucketStartUtcSec } from '@/utils/nyseTime';
+import { assertBucketInvariant } from '@/utils/devInvariants';
 
 type LiveOptions = { throttleMs?: number; pollMs?: number };
 const DEFAULTS: LiveOptions = { throttleMs: 250, pollMs: 1000 };
 
 const toIso = (sec: number) => new Date(sec * 1000).toISOString();
 
-export function useLiveBars(symbol: string, timeframe: string, opts: LiveOptions = DEFAULTS) {
+export function useLiveBars(symbol: string, timeframe: TF, opts: LiveOptions = DEFAULTS) {
   const [bar, setBar] = useState<Bar | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const throttleRef = useRef<number | null>(null);
@@ -37,7 +39,9 @@ export function useLiveBars(symbol: string, timeframe: string, opts: LiveOptions
             const payload = JSON.parse(ev.data);
             const tMs = Date.parse(payload?.time);
             if (!Number.isFinite(tMs)) return;
-            const aligned = alignNYSEBucketStartSec(Math.floor(tMs / 1000), timeframe);
+            const tickSec = Math.floor(tMs / 1000);
+            assertBucketInvariant(tickSec, timeframe);
+            const aligned = alignNYSEBucketStartUtcSec(tickSec, timeframe);
             emit({
               time: toIso(aligned),
               open: Number(payload.open),
@@ -79,7 +83,8 @@ export function useLiveBars(symbol: string, timeframe: string, opts: LiveOptions
         if (!Number.isFinite(px)) return;
 
         const nowSec = Math.floor(Date.now() / 1000);
-        const aligned = alignNYSEBucketStartSec(nowSec, timeframe);
+        assertBucketInvariant(nowSec, timeframe);
+        const aligned = alignNYSEBucketStartUtcSec(nowSec, timeframe);
 
         if (aligned !== lastBucketSec) {
           current = { time: toIso(aligned), open: px, high: px, low: px, close: px, volume: 0 };

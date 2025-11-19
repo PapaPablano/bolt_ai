@@ -1,6 +1,4 @@
-import type { Bar } from '@/types/bars';
-
-export const toSec = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
+import type { Bar } from '@/utils/bars';
 
 export function sma(bars: Bar[], period: number): { time: number; value: number }[] {
   const out: { time: number; value: number }[] = [];
@@ -13,10 +11,11 @@ export function sma(bars: Bar[], period: number): { time: number; value: number 
     sum += close;
 
     if (queue.length > period) {
-      sum -= queue.shift()!;
+      const removed = queue.shift()!;
+      sum -= removed;
     }
     if (queue.length === period) {
-      out.push({ time: toSec(bars[i].time), value: +(sum / period).toFixed(5) });
+      out.push({ time: bars[i].time, value: +(sum / period).toFixed(5) });
     }
   }
   return out;
@@ -31,9 +30,7 @@ export function ema(bars: Bar[], period: number): { time: number; value: number 
     const close = bars[i].close;
     const value = prev === undefined ? close : (close - prev) * k + prev;
     prev = value;
-    if (i >= period - 1) {
-      out.push({ time: toSec(bars[i].time), value: +value.toFixed(5) });
-    }
+    if (i >= period - 1) out.push({ time: bars[i].time, value: +value.toFixed(5) });
   }
   return out;
 }
@@ -63,7 +60,7 @@ export function bollinger(bars: Bar[], period: number, mult: number) {
       const mean = sum / period;
       const variance = sumSq / period - mean * mean;
       const sd = Math.sqrt(Math.max(variance, 0));
-      const time = toSec(bars[i].time);
+      const time = bars[i].time;
       middle.push({ time, value: +mean.toFixed(5) });
       upper.push({ time, value: +(mean + mult * sd).toFixed(5) });
       lower.push({ time, value: +(mean - mult * sd).toFixed(5) });
@@ -79,7 +76,8 @@ export function rsi(bars: Bar[], period: number) {
   let avgLoss = 0;
 
   for (let i = 1; i < bars.length; i++) {
-    const change = bars[i].close - bars[i - 1].close;
+    const prev = bars[i - 1];
+    const change = bars[i].close - prev.close;
     const gain = Math.max(change, 0);
     const loss = Math.max(-change, 0);
 
@@ -98,7 +96,7 @@ export function rsi(bars: Bar[], period: number) {
 
     const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
     const value = avgLoss === 0 ? 100 : 100 - 100 / (1 + rs);
-    out.push({ time: toSec(bars[i].time), value: +value.toFixed(2) });
+    out.push({ time: bars[i].time, value: +value.toFixed(2) });
   }
 
   return out;

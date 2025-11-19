@@ -68,6 +68,70 @@ export function IndicatorMenu({ timeframe }: { timeframe: TF }) {
             />
           </Row>
         </Section>
+        <Separator />
+        <Section title="SuperTrend-AI">
+          <Row>
+            <Switch checked={!!preset.useSTAI} onCheckedChange={(v) => updateTfPreset(timeframe, { useSTAI: v })} />
+            {preset.useSTAI && (
+              <>
+                <Param
+                  label="ATR"
+                  value={preset.stAiAtrLen ?? 14}
+                  onChange={(n) => updateTfPreset(timeframe, { stAiAtrLen: numberChange(n, preset.stAiAtrLen ?? 14) })}
+                />
+                <Param
+                  label="Min"
+                  step="0.1"
+                  value={preset.stAiMin ?? 1.5}
+                  onChange={(n) => updateTfPreset(timeframe, { stAiMin: numberChange(n, preset.stAiMin ?? 1.5) })}
+                />
+                <Param
+                  label="Mid"
+                  step="0.1"
+                  value={preset.stAiMid ?? 2.0}
+                  onChange={(n) => updateTfPreset(timeframe, { stAiMid: numberChange(n, preset.stAiMid ?? 2.0) })}
+                />
+                <Param
+                  label="Max"
+                  step="0.1"
+                  value={preset.stAiMax ?? 3.0}
+                  onChange={(n) => updateTfPreset(timeframe, { stAiMax: numberChange(n, preset.stAiMax ?? 3.0) })}
+                />
+              </>
+            )}
+          </Row>
+        </Section>
+        <Separator />
+        <Section title="MACD">
+          <Row>
+            <Switch checked={!!preset.useMACD} onCheckedChange={(v) => updateTfPreset(timeframe, { useMACD: v })} />
+            {preset.useMACD && (
+              <>
+                <Param
+                  label="Fast"
+                  value={preset.macdFast ?? 12}
+                  onChange={(n) => updateTfPreset(timeframe, { macdFast: numberChange(n, preset.macdFast ?? 12) })}
+                />
+                <Param
+                  label="Slow"
+                  value={preset.macdSlow ?? 26}
+                  onChange={(n) => updateTfPreset(timeframe, { macdSlow: numberChange(n, preset.macdSlow ?? 26) })}
+                />
+                <Param
+                  label="Signal"
+                  value={preset.macdSignal ?? 9}
+                  onChange={(n) => updateTfPreset(timeframe, { macdSignal: numberChange(n, preset.macdSignal ?? 9) })}
+                />
+              </>
+            )}
+          </Row>
+        </Section>
+        <Separator />
+        <Section title="VWAP">
+          <Row>
+            <Switch checked={!!preset.useVWAP} onCheckedChange={(v) => updateTfPreset(timeframe, { useVWAP: v })} />
+          </Row>
+        </Section>
       </PopoverContent>
     </Popover>
   );
@@ -86,7 +150,7 @@ function Row({ children }: { children: React.ReactNode }) {
   return <div className="flex items-center gap-3 flex-wrap">{children}</div>;
 }
 
-function Param({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
+function Param({ label, value, onChange, step = '1' }: { label: string; value: number; step?: string; onChange: (n: number) => void }) {
   return (
     <div className="flex items-center gap-2">
       <Label className="w-14">{label}</Label>
@@ -94,9 +158,9 @@ function Param({ label, value, onChange }: { label: string; value: number; onCha
         className="w-20"
         type="number"
         min={1}
-        step="1"
+        step={step}
         value={value}
-        onChange={(e) => onChange(parseInt(e.target.value || '1', 10))}
+        onChange={(e) => onChange(parseFloat(e.target.value || '0'))}
       />
     </div>
   );

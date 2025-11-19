@@ -12,7 +12,8 @@
     "postinstall": "npm install --prefix frontend",
     "smoke": "tsx scripts/smokeTest.ts",
     "invoke": "tsx scripts/testInvoke.ts",
-    "vite:server": "tsx scripts/startViteServer.ts"
+    "vite:server": "tsx scripts/startViteServer.ts",
+    "stai:reg": "tsx scripts/stai_regression.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.80.0",

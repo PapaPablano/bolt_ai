@@ -3,18 +3,26 @@ import { supabase } from '@/lib/supabaseClient';
 import type { ChartPrefs, TF, Range, TfPreset } from '@/types/prefs';
 import { DEFAULT_PRESETS, DEFAULT_RANGE, DEFAULT_TF } from '@/types/prefs';
 
-const LS_KEY = 'chart_prefs_v1';
+const LS_KEY = 'chart_prefs_v2';
+const LEGACY_KEYS = ['chart_prefs_v1'];
 
-const mergeDefaults = (p?: Partial<ChartPrefs>): ChartPrefs => ({
-  default_timeframe: (p?.default_timeframe ?? DEFAULT_TF) as TF,
-  default_range: (p?.default_range ?? DEFAULT_RANGE) as Range,
-  presets: { ...DEFAULT_PRESETS, ...(p?.presets ?? {}) },
-});
+const mergeDefaults = (p?: Partial<ChartPrefs>): ChartPrefs => {
+  const presets = (Object.keys(DEFAULT_PRESETS) as TF[]).reduce<Record<TF, TfPreset>>((acc, tf) => {
+    acc[tf] = { ...DEFAULT_PRESETS[tf], ...(p?.presets?.[tf] ?? {}) };
+    return acc;
+  }, {} as Record<TF, TfPreset>);
+
+  return {
+    default_timeframe: (p?.default_timeframe ?? DEFAULT_TF) as TF,
+    default_range: (p?.default_range ?? DEFAULT_RANGE) as Range,
+    presets,
+  };
+};
 
 const readLocal = (): ChartPrefs => {
   if (typeof window === 'undefined') return mergeDefaults();
   try {
-    const raw = window.localStorage.getItem(LS_KEY);
+    const raw = window.localStorage.getItem(LS_KEY) ?? LEGACY_KEYS.map((k) => window.localStorage.getItem(k)).find(Boolean);
     return raw ? mergeDefaults(JSON.parse(raw)) : mergeDefaults();
   } catch {
     return mergeDefaults();
