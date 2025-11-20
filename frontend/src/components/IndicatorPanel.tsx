@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import type { StPerfParams } from '@/utils/indicators-supertrend-perf';
 
-type IndToggle = 'STAI' | 'EMA' | 'RSI' | 'VWAP' | 'BB' | 'MACD';
+export type KdjPanelParams = {
+  period: number;
+  kSmooth: number;
+  dSmooth: number;
+  sessionAnchored: boolean;
+};
+
+type IndToggle = 'STAI' | 'EMA' | 'RSI' | 'VWAP' | 'BB' | 'MACD' | 'KDJ';
 
 type Props = {
   initial: {
@@ -9,6 +16,7 @@ type Props = {
     bb: { period: number; mult: number };
     macd: { fast: number; slow: number; signal: number };
     vwap: { mult: number };
+    kdj: KdjPanelParams;
   };
   toggles: Record<IndToggle, boolean>;
   onToggle: (name: IndToggle, on: boolean) => void;
@@ -16,18 +24,30 @@ type Props = {
   onSetBbParams: (params: Partial<{ period: number; mult: number }>) => void;
   onSetMacdParams: (params: Partial<{ fast: number; slow: number; signal: number }>) => void;
   onSetVwapParams: (params: Partial<{ mult: number }>) => void;
+  onSetKdjParams: (params: Partial<KdjPanelParams>) => void;
 };
 
-export function IndicatorPanel({ initial, toggles, onToggle, onSetStParams, onSetBbParams, onSetMacdParams, onSetVwapParams }: Props) {
+export function IndicatorPanel({
+  initial,
+  toggles,
+  onToggle,
+  onSetStParams,
+  onSetBbParams,
+  onSetMacdParams,
+  onSetVwapParams,
+  onSetKdjParams,
+}: Props) {
   const [stParams, setStParams] = useState<StPerfParams>(initial.st);
   const [bbParams, setBbParams] = useState(initial.bb);
   const [macdParams, setMacdParams] = useState(initial.macd);
   const [vwapParams, setVwapParams] = useState(initial.vwap);
+  const [kdjParams, setKdjParams] = useState(initial.kdj);
 
   useEffect(() => setStParams(initial.st), [initial.st]);
   useEffect(() => setBbParams(initial.bb), [initial.bb]);
   useEffect(() => setMacdParams(initial.macd), [initial.macd]);
   useEffect(() => setVwapParams(initial.vwap), [initial.vwap]);
+  useEffect(() => setKdjParams(initial.kdj), [initial.kdj]);
 
   const updateSt = <K extends keyof StPerfParams>(key: K, value: StPerfParams[K]) => {
     const next = { ...stParams, [key]: value };
@@ -48,6 +68,11 @@ export function IndicatorPanel({ initial, toggles, onToggle, onSetStParams, onSe
     const next = { ...vwapParams, ...patch };
     setVwapParams(next);
     onSetVwapParams(patch);
+  };
+  const updateKdj = (patch: Partial<KdjPanelParams>) => {
+    const next = { ...kdjParams, ...patch };
+    setKdjParams(next);
+    onSetKdjParams(patch);
   };
 
   const checkbox = (name: IndToggle, label: string) => (
@@ -131,6 +156,38 @@ export function IndicatorPanel({ initial, toggles, onToggle, onSetStParams, onSe
         <Field label="Signal">
           <input type="number" min={2} value={macdParams.signal} onChange={(event) => updateMacd({ signal: Number(event.target.value) })} />
         </Field>
+      </div>
+
+      {checkbox('KDJ', 'KDJ (Stoch K/D + J)')}
+      <div className="grid grid-cols-4 gap-2 text-xs ml-4">
+        <Field label="N">
+          <input
+            type="number"
+            min={3}
+            value={kdjParams.period}
+            onChange={(event) => updateKdj({ period: Math.max(3, Number(event.target.value) || 9) })}
+          />
+        </Field>
+        <Field label="K">
+          <input
+            type="number"
+            min={1}
+            value={kdjParams.kSmooth}
+            onChange={(event) => updateKdj({ kSmooth: Math.max(1, Number(event.target.value) || 3) })}
+          />
+        </Field>
+        <Field label="D">
+          <input
+            type="number"
+            min={1}
+            value={kdjParams.dSmooth}
+            onChange={(event) => updateKdj({ dSmooth: Math.max(1, Number(event.target.value) || 3) })}
+          />
+        </Field>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={kdjParams.sessionAnchored} onChange={(event) => updateKdj({ sessionAnchored: event.target.checked })} />
+          <span className="text-slate-400">Anchor to RTH</span>
+        </label>
       </div>
     </div>
   );

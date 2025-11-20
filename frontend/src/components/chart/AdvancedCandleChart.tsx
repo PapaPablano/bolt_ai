@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as LWC from 'lightweight-charts';
-import type { HistogramData, ISeriesApi, Time, TimeRange } from 'lightweight-charts';
+import type { HistogramData, ISeriesApi, LineData, Time, TimeRange } from 'lightweight-charts';
 import type { TF, Range, TfPreset } from '@/types/prefs';
 import type { Bar as ApiBar } from '@/types/bars';
 import { useChartPrefs } from '@/hooks/useChartPrefs';
 import { useHistoricalBars } from '@/hooks/useHistoricalBars';
 import { useLiveBars } from '@/hooks/useLiveBars';
 import { useProbeToggle } from '@/hooks/useProbeToggle';
-import { useIndicatorWorker } from '@/hooks/useIndicatorWorker';
+import { useIndicatorWorker, type LinePt as WorkerLinePt } from '@/hooks/useIndicatorWorker';
 import { sma } from '@/utils/indicators';
 import { normalizeHistoricalBars, type Bar as ChartBar } from '@/utils/bars';
 import { alignNYSEBucketStartUtcSec, bucketSec, toSec } from '@/utils/nyseTime';
@@ -15,12 +15,13 @@ import { preprocessOhlcv } from '@/utils/preprocessOhlcv';
 import type { LinePt, StPerfParams } from '@/utils/indicators-supertrend-perf';
 import { assertBucketInvariant } from '@/utils/devInvariants';
 import { downsampleOhlcVisible } from '@/utils/ohlc-decimator';
-import { IndicatorPanel } from '@/components/IndicatorPanel';
+import { IndicatorPanel, type KdjPanelParams } from '@/components/IndicatorPanel';
 import { ChartProbe } from './ChartProbe';
 import { IndicatorMenu } from './IndicatorMenu';
 import { IntervalBar } from './IntervalBar';
 import { RangeBar } from './RangeBar';
 import { Button } from '@/components/ui/button';
+import PaneKDJ from './PaneKDJ';
 
 type Props = { symbol: string; initialTf?: TF; initialRange?: Range; height?: number };
 type ProbeState = { ok: boolean; error?: string; lastEvent?: string };
@@ -148,20 +149,46 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     }
   }, []);
 
-  const indicatorWorkerHandlers = useMemo(
-    () => ({
-      onOverlayFull: handleWorkerOverlayFull,
-      onOverlayPatch: handleWorkerOverlayPatch,
-      onOverlayFullMulti: handleWorkerOverlayFullMulti,
-      onOverlayPatchMulti: handleWorkerOverlayPatchMulti,
-      onSignals: (indicator: string, signals: { time: number; price: number; dir: 1 | -1 }[]) => {
-        if (import.meta.env.DEV && signals.length) console.debug('[indicator][signals]', indicator, signals.at(-1));
-      },
-    }),
-    [handleWorkerOverlayFull, handleWorkerOverlayPatch, handleWorkerOverlayFullMulti, handleWorkerOverlayPatchMulti],
-  );
+  const [kdjK, setKdjK] = useState<WorkerLinePt[]>([]);
+  const [kdjD, setKdjD] = useState<WorkerLinePt[]>([]);
+  const [kdjJ, setKdjJ] = useState<WorkerLinePt[]>([]);
 
-  const indicatorWorker = useIndicatorWorker(symbol, tf, indicatorWorkerHandlers);
+  const mergePanePatch = useCallback((prev: WorkerLinePt[], patch?: WorkerLinePt[]) => {
+    if (!patch?.length) return prev;
+    const next = patch[patch.length - 1];
+    if (!next) return prev;
+    if (prev.length && prev[prev.length - 1].time === next.time) {
+      return [...prev.slice(0, - 1), next];
+    }
+    return [...prev, next];
+  }, []);
+
+  const indicatorWorker = useIndicatorWorker(symbol, tf, {
+    onOverlayFull: handleWorkerOverlayFull,
+    onOverlayPatch: handleWorkerOverlayPatch,
+    onOverlayFullMulti: handleWorkerOverlayFullMulti,
+    onOverlayPatchMulti: handleWorkerOverlayPatchMulti,
+    onSignals: (indicator: string, signals: { time: number; price: number; dir: 1 | -1 }[]) => {
+      if (import.meta.env.DEV && signals.length) console.debug('[indicator][signals]', indicator, signals.at(-1));
+    },
+    kdj: {
+      onKdjFull: (k, d, j) => {
+        setKdjK(k);
+        setKdjD(d);
+        setKdjJ(j);
+      },
+      onKdjPatch: (k, d, j) => {
+        if (k) setKdjK((prev) => mergePanePatch(prev, k));
+        if (d) setKdjD((prev) => mergePanePatch(prev, d));
+        if (j) setKdjJ((prev) => mergePanePatch(prev, j));
+      },
+    },
+  });
+
+  const kdjPaneK = useMemo<LineData[]>(() => mapPointsForChart(normalizeWorkerSeries(kdjK)) as LineData[], [kdjK]);
+  const kdjPaneD = useMemo<LineData[]>(() => mapPointsForChart(normalizeWorkerSeries(kdjD)) as LineData[], [kdjD]);
+  const kdjPaneJ = useMemo<LineData[]>(() => mapPointsForChart(normalizeWorkerSeries(kdjJ)) as LineData[], [kdjJ]);
+  const showKdjPane = indicatorToggles.KDJ && (kdjPaneK.length || kdjPaneD.length || kdjPaneJ.length);
 
   const applyVisibleDecimation = useCallback(
     (range: { from: number; to: number } | null) => {
@@ -199,9 +226,25 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     [tf],
   );
 
-  type WorkerIndicatorName = 'STAI' | 'EMA' | 'RSI' | 'VWAP' | 'BB' | 'MACD';
+  type PanelIndicatorName = 'STAI' | 'EMA' | 'RSI' | 'VWAP' | 'BB' | 'MACD' | 'KDJ';
+type WorkerIndicatorName = Exclude<PanelIndicatorName, 'KDJ'>;
   const stPanelDefaults = useMemo(() => buildStPerfParams(preset), [preset]);
-  const indicatorToggles = useMemo<Record<WorkerIndicatorName, boolean>>(
+  const bbPanelDefaults = useMemo(() => ({ period: preset.bbPeriod, mult: preset.bbMult }), [preset.bbPeriod, preset.bbMult]);
+  const macdPanelDefaults = useMemo(
+    () => ({ fast: preset.macdFast ?? 12, slow: preset.macdSlow ?? 26, signal: preset.macdSignal ?? 9 }),
+    [preset.macdFast, preset.macdSlow, preset.macdSignal],
+  );
+  const vwapPanelDefaults = useMemo(() => ({ mult: preset.vwapMult ?? 1 }), [preset.vwapMult]);
+  const kdjPanelDefaults = useMemo<KdjPanelParams>(
+    () => ({
+      period: preset.kdjPeriod ?? 9,
+      kSmooth: preset.kdjKSmooth ?? 3,
+      dSmooth: preset.kdjDSmooth ?? 3,
+      sessionAnchored: preset.kdjSessionAnchored ?? true,
+    }),
+    [preset.kdjPeriod, preset.kdjKSmooth, preset.kdjDSmooth, preset.kdjSessionAnchored],
+  );
+  const indicatorToggles = useMemo<Record<PanelIndicatorName, boolean>>(
     () => ({
       STAI: !!preset.useSTPerf,
       EMA: !!preset.useEMA,
@@ -209,12 +252,13 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       VWAP: !!preset.useVWAP,
       BB: !!preset.useBB,
       MACD: !!preset.useMACD,
+      KDJ: !!preset.useKDJ,
     }),
-    [preset.useSTPerf, preset.useEMA, preset.useRSI, preset.useVWAP, preset.useBB, preset.useMACD],
+    [preset.useSTPerf, preset.useEMA, preset.useRSI, preset.useVWAP, preset.useBB, preset.useMACD, preset.useKDJ],
   );
   const indicatorPanelInitials = useMemo(
-    () => ({ st: stPanelDefaults, bb: bbPanelDefaults, macd: macdPanelDefaults, vwap: vwapPanelDefaults }),
-    [bbPanelDefaults, macdPanelDefaults, stPanelDefaults, vwapPanelDefaults],
+    () => ({ st: stPanelDefaults, bb: bbPanelDefaults, macd: macdPanelDefaults, vwap: vwapPanelDefaults, kdj: kdjPanelDefaults }),
+    [bbPanelDefaults, macdPanelDefaults, stPanelDefaults, vwapPanelDefaults, kdjPanelDefaults],
   );
 
   const persistStParams = useCallback(
@@ -232,13 +276,6 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     },
     [tf, updateTfPreset],
   );
-
-  const bbPanelDefaults = useMemo(() => ({ period: preset.bbPeriod, mult: preset.bbMult }), [preset.bbPeriod, preset.bbMult]);
-  const macdPanelDefaults = useMemo(
-    () => ({ fast: preset.macdFast ?? 12, slow: preset.macdSlow ?? 26, signal: preset.macdSignal ?? 9 }),
-    [preset.macdFast, preset.macdSlow, preset.macdSignal],
-  );
-  const vwapPanelDefaults = useMemo(() => ({ mult: preset.vwapMult ?? 1 }), [preset.vwapMult]);
 
   const persistBbParams = useCallback(
     (params: Partial<{ period: number; mult: number }>) => {
@@ -270,7 +307,19 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     [tf, updateTfPreset],
   );
 
-  const clearIndicatorSeries = useCallback((name: WorkerIndicatorName) => {
+  const persistKdjParams = useCallback(
+    (params: Partial<KdjPanelParams>) => {
+      const patch: Partial<TfPreset> = {};
+      if (params.period !== undefined) patch.kdjPeriod = params.period;
+      if (params.kSmooth !== undefined) patch.kdjKSmooth = params.kSmooth;
+      if (params.dSmooth !== undefined) patch.kdjDSmooth = params.dSmooth;
+      if (params.sessionAnchored !== undefined) patch.kdjSessionAnchored = params.sessionAnchored;
+      if (Object.keys(patch).length) updateTfPreset(tf, patch);
+    },
+    [tf, updateTfPreset],
+  );
+
+  const clearIndicatorSeries = useCallback((name: PanelIndicatorName) => {
     if (name === 'STAI') overlays.current.stai?.setData([]);
     if (name === 'EMA') overlays.current.ema?.setData([]);
     if (name === 'RSI') rsiSeriesRef.current?.setData([]);
@@ -285,10 +334,21 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       macdSigRef.current?.setData([]);
       macdHistRef.current?.setData([]);
     }
+    if (name === 'KDJ') {
+      setKdjK([]);
+      setKdjD([]);
+      setKdjJ([]);
+    }
   }, []);
 
   const handleIndicatorToggle = useCallback(
-    (name: WorkerIndicatorName, on: boolean) => {
+    (name: PanelIndicatorName, on: boolean) => {
+      if (name === 'KDJ') {
+        indicatorWorker.toggleKdj(on);
+        if (!on) clearIndicatorSeries('KDJ');
+        updateTfPreset(tf, { useKDJ: on });
+        return;
+      }
       indicatorWorker.toggle(name, on);
       if (!on) clearIndicatorSeries(name);
       const patch: Partial<TfPreset> = {};
@@ -339,6 +399,14 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     [indicatorWorker, persistVwapParams],
   );
 
+  const handleKdjParamChange = useCallback(
+    (params: Partial<KdjPanelParams>) => {
+      indicatorWorker.setKdjParams(params);
+      persistKdjParams(params);
+    },
+    [indicatorWorker, persistKdjParams],
+  );
+
   useEffect(() => {
     indicatorWorker.setStParams(stPanelDefaults);
   }, [indicatorWorker, stPanelDefaults]);
@@ -356,6 +424,10 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   }, [indicatorWorker, vwapPanelDefaults]);
 
   useEffect(() => {
+    indicatorWorker.setKdjParams(kdjPanelDefaults);
+  }, [indicatorWorker, kdjPanelDefaults]);
+
+  useEffect(() => {
     if (overlays.current.vwap) {
       const width = Math.max(1, Math.min(4, vwapPanelDefaults.mult));
       overlays.current.vwap.applyOptions({ lineWidth: width });
@@ -363,11 +435,14 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   }, [vwapPanelDefaults]);
 
   useEffect(() => {
-    (Object.keys(indicatorToggles) as WorkerIndicatorName[]).forEach((name) => {
+    const workerNames: WorkerIndicatorName[] = ['STAI', 'EMA', 'RSI', 'VWAP', 'BB', 'MACD'];
+    workerNames.forEach((name) => {
       const on = indicatorToggles[name];
       indicatorWorker.toggle(name, on);
       if (!on) clearIndicatorSeries(name);
     });
+    indicatorWorker.toggleKdj(indicatorToggles.KDJ);
+    if (!indicatorToggles.KDJ) clearIndicatorSeries('KDJ');
   }, [indicatorWorker, indicatorToggles, clearIndicatorSeries]);
 
   useEffect(() => {
@@ -711,6 +786,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         onSetBbParams={handleBbParamChange}
         onSetMacdParams={handleMacdParamChange}
         onSetVwapParams={handleVwapParamChange}
+        onSetKdjParams={handleKdjParamChange}
       />
 
       <div className="relative">
@@ -724,6 +800,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       </div>
       {preset.useRSI && <div ref={rsiRef} className="w-full" style={{ minHeight: 140 }} />}
       {preset.useMACD && <div ref={macdRef} className="w-full" style={{ minHeight: 180 }} />}
+      {showKdjPane && <PaneKDJ k={kdjPaneK} d={kdjPaneD} j={kdjPaneJ} />}
 
       {showProbe && (
         <ChartProbe

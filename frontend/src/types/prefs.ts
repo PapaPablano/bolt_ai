@@ -34,12 +34,22 @@ export type TfPreset = {
   stPerfDenomSpan?: number;
   stPerfUseAMA?: boolean;
   stPerfApplyImmediateOnFlip?: boolean;
+  useKDJ?: boolean;
+  kdjPeriod?: number;
+  kdjKSmooth?: number;
+  kdjDSmooth?: number;
+  kdjSessionAnchored?: boolean;
 };
 
 export type ChartPrefs = {
   default_timeframe: TF;
   default_range: Range;
   presets: Record<TF, TfPreset>;
+  kdjEnabled?: boolean;
+  kdjPeriod?: number;
+  kdjKSmooth?: number;
+  kdjDSmooth?: number;
+  kdjSessionAnchored?: boolean;
 };
 
 export const DEFAULT_TF: TF = '1Hour';
@@ -78,6 +88,11 @@ export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
     stPerfDenomSpan: 10,
     stPerfUseAMA: true,
     stPerfApplyImmediateOnFlip: false,
+    useKDJ: true,
+    kdjPeriod: 9,
+    kdjKSmooth: 3,
+    kdjDSmooth: 3,
+    kdjSessionAnchored: true,
   },
   '5Min': {
     useSMA: false,
@@ -111,6 +126,11 @@ export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
     stPerfDenomSpan: 10,
     stPerfUseAMA: true,
     stPerfApplyImmediateOnFlip: false,
+    useKDJ: true,
+    kdjPeriod: 9,
+    kdjKSmooth: 3,
+    kdjDSmooth: 3,
+    kdjSessionAnchored: true,
   },
   '10Min': {
     useSMA: false,
@@ -144,6 +164,11 @@ export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
     stPerfDenomSpan: 10,
     stPerfUseAMA: true,
     stPerfApplyImmediateOnFlip: false,
+    useKDJ: true,
+    kdjPeriod: 9,
+    kdjKSmooth: 3,
+    kdjDSmooth: 3,
+    kdjSessionAnchored: true,
   },
   '15Min': {
     useSMA: false,
@@ -177,6 +202,11 @@ export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
     stPerfDenomSpan: 10,
     stPerfUseAMA: true,
     stPerfApplyImmediateOnFlip: false,
+    useKDJ: true,
+    kdjPeriod: 9,
+    kdjKSmooth: 3,
+    kdjDSmooth: 3,
+    kdjSessionAnchored: true,
   },
   '1Hour': {
     useSMA: true,
@@ -210,6 +240,11 @@ export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
     stPerfDenomSpan: 10,
     stPerfUseAMA: true,
     stPerfApplyImmediateOnFlip: false,
+    useKDJ: true,
+    kdjPeriod: 9,
+    kdjKSmooth: 3,
+    kdjDSmooth: 3,
+    kdjSessionAnchored: true,
   },
   '4Hour': {
     useSMA: true,
@@ -243,6 +278,11 @@ export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
     stPerfDenomSpan: 10,
     stPerfUseAMA: true,
     stPerfApplyImmediateOnFlip: false,
+    useKDJ: true,
+    kdjPeriod: 9,
+    kdjKSmooth: 3,
+    kdjDSmooth: 3,
+    kdjSessionAnchored: true,
   },
   '1Day': {
     useSMA: true,
@@ -276,5 +316,10 @@ export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
     stPerfDenomSpan: 10,
     stPerfUseAMA: true,
     stPerfApplyImmediateOnFlip: false,
+    useKDJ: true,
+    kdjPeriod: 9,
+    kdjKSmooth: 3,
+    kdjDSmooth: 3,
+    kdjSessionAnchored: true,
   },
 };

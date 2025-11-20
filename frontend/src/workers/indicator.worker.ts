@@ -9,9 +9,11 @@ import {
   type StPerfState,
 } from '@/utils/indicators-supertrend-perf';
 
-type IndName = 'STAI' | 'EMA' | 'RSI' | 'VWAP' | 'BB' | 'MACD';
+type IndName = 'STAI' | 'EMA' | 'RSI' | 'VWAP' | 'BB' | 'MACD' | 'KDJ';
+type PaneName = 'kdj';
 
 type MsgInit = { type: 'INIT'; symbol: string; tf: string; stParams?: StPerfParams };
+
 type MsgSetHistory = { type: 'SET_HISTORY'; bars: Candle[] };
 type MsgLive = { type: 'LIVE_BAR'; bar: Candle; barClosed: boolean };
 type MsgToggle = { type: 'TOGGLE'; name: IndName; on: boolean };
@@ -19,7 +21,8 @@ type MsgSetParams =
   | { type: 'SET_PARAMS'; name: 'STAI'; params: Partial<StPerfParams> }
   | { type: 'SET_PARAMS'; name: 'BB'; params: Partial<BbParams> }
   | { type: 'SET_PARAMS'; name: 'MACD'; params: Partial<MacdParams> }
-  | { type: 'SET_PARAMS'; name: 'VWAP'; params: Partial<VwapParams> };
+  | { type: 'SET_PARAMS'; name: 'VWAP'; params: Partial<VwapParams> }
+  | { type: 'SET_PARAMS'; name: 'KDJ'; params: Partial<KdjParams> };
 type Incoming = MsgInit | MsgSetHistory | MsgLive | MsgToggle | MsgSetParams;
 
 type CompactLine = [number, number];
@@ -32,7 +35,22 @@ type OutOverlayPatch = { type: 'OVERLAY_PATCH'; name: IndName; point: CompactPoi
 type OutOverlayFullMulti = { type: 'OVERLAY_FULL_MULTI'; name: IndName; series: MultiSeries };
 type OutOverlayPatchMulti = { type: 'OVERLAY_PATCH_MULTI'; name: IndName; point: MultiPoint };
 type OutSignals = { type: 'SIGNALS'; name: 'STAI'; signals: { time: number; price: number; dir: 1 | -1 }[] };
-type Outgoing = OutOverlayFull | OutOverlayPatch | OutOverlayFullMulti | OutOverlayPatchMulti | OutSignals;
+type OutPaneFull = { type: 'PANE_FULL'; key: PaneName; k: CompactLine[]; d: CompactLine[]; j: CompactLine[] };
+type OutPanePatch = {
+  type: 'PANE_PATCH';
+  key: PaneName;
+  k?: CompactLine[];
+  d?: CompactLine[];
+  j?: CompactLine[];
+};
+type Outgoing =
+  | OutOverlayFull
+  | OutOverlayPatch
+  | OutOverlayFullMulti
+  | OutOverlayPatchMulti
+  | OutSignals
+  | OutPaneFull
+  | OutPanePatch;
 
 const ctx: DedicatedWorkerGlobalScope = self as DedicatedWorkerGlobalScope;
 
@@ -44,6 +62,13 @@ type VwapParams = { mult: number };
 type RollingStatsState = { capacity: number; n: number; mean: number; m2: number; queue: number[] };
 type MacdParams = { fast: number; slow: number; signal: number };
 type MacdState = { fast: EmaState; slow: EmaState; signal: EmaState };
+type KdjParams = {
+  period: number;
+  kSmooth: number;
+  dSmooth: number;
+  sessionAnchored: boolean;
+};
+type KdjSeries = { k: LinePt[]; d: LinePt[]; j: LinePt[] } | null;
 
 type WorkerState = {
   symbol: string;
@@ -55,22 +80,26 @@ type WorkerState = {
   vwapOn: boolean;
   bbOn: boolean;
   macdOn: boolean;
+  kdjOn: boolean;
   stParams: StPerfParams;
   bbParams: BbParams;
   macdParams: MacdParams;
   vwapParams: VwapParams;
+  kdjParams: KdjParams;
   stState: StPerfState | null;
   emaState: EmaState | null;
   rsiState: RsiState | null;
   vwapState: VwapState | null;
   bbState: RollingStatsState | null;
   macdState: MacdState | null;
+  kdjSeries: KdjSeries;
   stCheckpoint: StPerfState | null;
   emaCheckpoint: EmaState | null;
   rsiCheckpoint: RsiState | null;
   vwapCheckpoint: VwapState | null;
   bbCheckpoint: RollingStatsState | null;
   macdCheckpoint: MacdState | null;
+  kdjCommitTime?: number;
   stCommitTime?: number;
   emaCommitTime?: number;
   rsiCommitTime?: number;
@@ -99,6 +128,7 @@ const defaultStParams: StPerfParams = {
 const defaultBbParams: BbParams = { period: 20, mult: 2 };
 const defaultMacdParams: MacdParams = { fast: 12, slow: 26, signal: 9 };
 const defaultVwapParams: VwapParams = { mult: 1 };
+const defaultKdjParams: KdjParams = { period: 9, kSmooth: 3, dSmooth: 3, sessionAnchored: true };
 
 const state: WorkerState = {
   symbol: '',
@@ -110,16 +140,19 @@ const state: WorkerState = {
   vwapOn: false,
   bbOn: false,
   macdOn: false,
+  kdjOn: false,
   stParams: defaultStParams,
   bbParams: defaultBbParams,
   macdParams: defaultMacdParams,
   vwapParams: defaultVwapParams,
+  kdjParams: defaultKdjParams,
   stState: null,
   emaState: null,
   rsiState: null,
   vwapState: null,
   bbState: null,
   macdState: null,
+  kdjSeries: null,
   stCheckpoint: null,
   emaCheckpoint: null,
   rsiCheckpoint: null,
@@ -159,6 +192,7 @@ const sortAndDedupeBars = (bars: Candle[]) => {
 };
 
 const post = (payload: Outgoing) => ctx.postMessage(payload);
+const encodeLines = (series: LinePt[]): CompactLine[] => encodeSeries(series);
 
 const initEmaState = (span = EMA_SPAN): EmaState => ({ span, alpha: 2 / (span + 1), warmupCount: 0, warmupSum: 0 });
 const cloneEmaState = (src: EmaState | null, span = EMA_SPAN): EmaState =>
@@ -216,6 +250,107 @@ const etAnchorsMs = (tMs: number) => {
   const midnightMs = Date.parse(midnightEt);
   const etOpenMs = midnightMs + (9 * 60 + 30) * 60 * 1000;
   return { etOpenMs, etNextOpenMs: etOpenMs + DAY_MS };
+};
+
+const timeToMs = (value: number) => (value > 1e12 ? value : value * 1000);
+
+const sessionKeyMs = (barTime: number) => {
+  const ms = timeToMs(barTime);
+  const { etOpenMs } = etAnchorsMs(ms);
+  return etOpenMs;
+};
+
+const buildSessionBoundarySet = (tf: string, bars: Candle[]): Set<number> => {
+  const set = new Set<number>();
+  if (!bars.length || tf === '1Day') return set;
+  let prevKey: number | null = null;
+  for (const bar of bars) {
+    const key = sessionKeyMs(bar.time);
+    if (prevKey === null || key !== prevKey) {
+      set.add(bar.time);
+      prevKey = key;
+    }
+  }
+  return set;
+};
+
+const kdjAlpha = (smooth: number) => (smooth > 1 ? 1 / smooth : 1);
+
+const computeKdjSeries = (
+  bars: Candle[],
+  params: KdjParams,
+  tf: string,
+): KdjSeries => {
+  if (!bars.length) return { k: [], d: [], j: [] };
+  const sorted = sortAndDedupeBars(bars);
+  const data = sorted.map((bar) => ({
+    time: bar.time,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+  }));
+  const period = Math.max(1, params.period | 0);
+  const alphaK = kdjAlpha(Math.max(1, params.kSmooth | 0));
+  const alphaD = kdjAlpha(Math.max(1, params.dSmooth | 0));
+  const sessionStarts = params.sessionAnchored ? buildSessionBoundarySet(tf, sorted) : undefined;
+
+  const K: LinePt[] = [];
+  const D: LinePt[] = [];
+  const J: LinePt[] = [];
+  let kPrev = 50;
+  let dPrev = 50;
+
+  for (let i = 0; i < data.length; i++) {
+    const { time, close } = data[i];
+    if (sessionStarts?.has(time)) {
+      kPrev = 50;
+      dPrev = 50;
+    }
+    const start = Math.max(0, i - (period - 1));
+    let hi = -Infinity;
+    let lo = Infinity;
+    for (let j = start; j <= i; j++) {
+      hi = Math.max(hi, data[j].high);
+      lo = Math.min(lo, data[j].low);
+    }
+    const range = Math.max(1e-9, hi - lo);
+    const rsv = ((close - lo) / range) * 100;
+    const kNow = kPrev + alphaK * (rsv - kPrev);
+    const dNow = dPrev + alphaD * (kNow - dPrev);
+    const jNow = 3 * kNow - 2 * dNow;
+    K.push({ time, value: kNow });
+    D.push({ time, value: dNow });
+    J.push({ time, value: jNow });
+    kPrev = kNow;
+    dPrev = dNow;
+  }
+
+  return { k: K, d: D, j: J };
+};
+
+const postKdjFull = (series: KdjSeries) => {
+  if (!series) return;
+  post({ type: 'PANE_FULL', key: 'kdj', k: encodeSeries(series.k), d: encodeSeries(series.d), j: encodeSeries(series.j) });
+};
+
+const postKdjPatch = (series?: Partial<KdjSeries> | null) => {
+  if (!series) return;
+  post({
+    type: 'PANE_PATCH',
+    key: 'kdj',
+    k: series.k ? encodeLines(series.k) : undefined,
+    d: series.d ? encodeLines(series.d) : undefined,
+    j: series.j ? encodeLines(series.j) : undefined,
+  });
+};
+
+const buildKdjBars = (bar?: Candle): Candle[] => {
+  const hist = state.hist.slice();
+  if (!bar) return hist;
+  const idx = hist.findIndex((b) => b.time === bar.time);
+  if (idx >= 0) hist[idx] = { ...bar };
+  else hist.push({ ...bar });
+  return hist;
 };
 
 const ensureVwapSession = (st: VwapState, barTime: number) => {
@@ -314,6 +449,7 @@ const resetSnapshots = () => {
   state.vwapCommitTime = undefined;
   state.bbCommitTime = undefined;
   state.macdCommitTime = undefined;
+  state.kdjCommitTime = undefined;
 };
 
 const computeAll = () => {
@@ -409,6 +545,14 @@ const computeAll = () => {
     post({ type: 'OVERLAY_FULL_MULTI', name: 'MACD', series: encodeMultiSeries({ macd, signal, hist }) });
   } else {
     state.macdState = null;
+  }
+
+  if (state.kdjOn) {
+    state.kdjSeries = computeKdjSeries(state.hist, state.kdjParams, state.tf);
+    postKdjFull(state.kdjSeries);
+    state.kdjCommitTime = state.kdjSeries?.k.at(-1)?.time;
+  } else {
+    state.kdjSeries = null;
   }
 
   resetSnapshots();
@@ -579,6 +723,28 @@ const onLiveBar = (bar: Candle, barClosed: boolean) => {
     }
   }
 
+  if (state.kdjOn) {
+    const previewBars = buildKdjBars(bar);
+    const tailStart = Math.max(0, previewBars.length - (state.kdjParams.period + 15));
+    const tail = previewBars.slice(tailStart);
+    const tailSeries = computeKdjSeries(tail, state.kdjParams, state.tf);
+    const lastK = tailSeries?.k.at(-1);
+    const lastD = tailSeries?.d.at(-1);
+    const lastJ = tailSeries?.j.at(-1);
+    if (lastK || lastD || lastJ) {
+      postKdjPatch({
+        k: lastK ? [lastK] : undefined,
+        d: lastD ? [lastD] : undefined,
+        j: lastJ ? [lastJ] : undefined,
+      });
+    }
+    if (barClosed) {
+      state.kdjSeries = computeKdjSeries(previewBars, state.kdjParams, state.tf);
+      postKdjFull(state.kdjSeries);
+      state.kdjCommitTime = bar.time;
+    }
+  }
+
   if (barClosed) {
     const idx = state.hist.findIndex((b) => b.time === bar.time);
     if (idx >= 0) state.hist[idx] = { ...bar };
@@ -613,6 +779,7 @@ ctx.addEventListener('message', (event: MessageEvent<Incoming>) => {
       if (msg.name === 'VWAP') state.vwapOn = msg.on;
       if (msg.name === 'BB') state.bbOn = msg.on;
       if (msg.name === 'MACD') state.macdOn = msg.on;
+      if (msg.name === 'KDJ') state.kdjOn = msg.on;
       computeAll();
       break;
     case 'SET_PARAMS':
@@ -620,6 +787,7 @@ ctx.addEventListener('message', (event: MessageEvent<Incoming>) => {
       if (msg.name === 'BB') state.bbParams = { ...state.bbParams, ...msg.params } as BbParams;
       if (msg.name === 'MACD') state.macdParams = { ...state.macdParams, ...msg.params } as MacdParams;
       if (msg.name === 'VWAP') state.vwapParams = { ...state.vwapParams, ...msg.params } as VwapParams;
+      if (msg.name === 'KDJ') state.kdjParams = { ...state.kdjParams, ...msg.params } as KdjParams;
       computeAll();
       break;
     default:
