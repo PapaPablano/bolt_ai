@@ -33,7 +33,12 @@ async def get_pool() -> asyncpg.Pool:
     return _pool
 
 
-async def fetch_ohlc(symbol: str, tf: str, start_ms: int, end_ms: int) -> List[Dict[str, Any]]:
+async def fetch_ohlc(
+    symbol: str,
+    tf: str,
+    start_ms: int,
+    end_ms: int,
+) -> List[Dict[str, Any]]:
     """Return stitched OHLC rows for the requested window."""
     table = TABLE_BY_TF.get(tf)
     if table is None:
@@ -65,4 +70,40 @@ async def fetch_ohlc(symbol: str, tf: str, start_ms: int, end_ms: int) -> List[D
             "volume": int(record["volume"]),
         }
         for record in rows
+    ]
+
+
+async def fetch_latest(symbol: str, tf: str, limit: int = 5000) -> List[Dict[str, Any]]:
+    """Return the most recent stitched rows for sanity checks."""
+
+    table = TABLE_BY_TF.get(tf)
+    if table is None:
+        raise ValueError(f"Unsupported timeframe '{tf}'.")
+
+    symbol_upper = symbol.upper()
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT bucket AS ts, open, high, low, close, volume
+              FROM {table}
+             WHERE symbol = $1
+             ORDER BY bucket DESC
+             LIMIT $2
+            """,
+            symbol_upper,
+            max(1, limit),
+        )
+
+    ordered = list(reversed(rows))
+    return [
+        {
+            "time": int(record["ts"].timestamp() * 1000),
+            "open": float(record["open"]),
+            "high": float(record["high"]),
+            "low": float(record["low"]),
+            "close": float(record["close"]),
+            "volume": int(record["volume"]),
+        }
+        for record in ordered
     ]
