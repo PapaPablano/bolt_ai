@@ -7,8 +7,10 @@ from typing import Dict, Set, Tuple
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from zoneinfo import ZoneInfo
 
+from .api_ohlc import router as ohlc_router
 from .config import OHLC_DB_URL  # noqa: F401 (import ensures env validation)
 from .providers.alpaca_ws import AlpacaBarsClient
 
@@ -104,6 +106,14 @@ class Hub:
 
 hub = Hub()
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(ohlc_router)
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):

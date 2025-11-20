@@ -1,7 +1,8 @@
-import { env } from './env';
-import { normalizeBarsPayload } from './bars';
-import { supabase } from './supabase';
-import { isValidSymbol, normalizeSymbol } from './symbols';
+import { env } from '../env';
+import { normalizeBarsPayload } from '../bars';
+import { supabase } from '../supabase';
+import { isValidSymbol, normalizeSymbol } from '../symbols';
+import { buildRangeBounds, fetchOHLC, windowFromDays } from './ohlc';
 
 export interface StockQuote {
   symbol: string;
@@ -34,52 +35,26 @@ export async function fetchStockQuote(symbol: string): Promise<StockQuote> {
   return data;
 }
 
-export async function fetchHistoricalData(symbol: string, timeframe: string = '1D'): Promise<BarData[]> {
-  const barsFunction = env.barsFunction || 'get-bars';
+export async function fetchHistoricalData(symbol: string, range: string = '1D'): Promise<BarData[]> {
   const normalizedSymbol = normalizeSymbol(symbol);
   if (!isValidSymbol(normalizedSymbol)) {
     throw new Error('Invalid symbol');
   }
 
-  const upper = timeframe.toUpperCase();
-  const now = new Date();
-  const nowIso = now.toISOString();
+  const upper = range.toUpperCase();
+  const nowMs = Date.now();
+  let params: ReturnType<typeof buildRangeBounds>;
 
-  // Map UI selections (which represent range) into API shape.
-  // Short ranges use intraday bars; longer ranges use daily bars.
-  let body: Record<string, unknown> = { symbol: normalizedSymbol, range: '6M', timeframe: '1Day' };
-
-  switch (upper) {
-    case '1D': {
-      const start = new Date(now.getTime() - 2 * 86_400_000).toISOString();
-      body = { symbol: normalizedSymbol, timeframe: '5Min', start, end: nowIso };
-      break;
-    }
-    case '5D': {
-      const start = new Date(now.getTime() - 7 * 86_400_000).toISOString();
-      body = { symbol: normalizedSymbol, timeframe: '15Min', start, end: nowIso };
-      break;
-    }
-    case '1M':
-    case '3M':
-    case '6M':
-    case '1Y':
-    case '2Y':
-    case '5Y':
-    case '10Y':
-    case 'MAX': {
-      body = { symbol: normalizedSymbol, timeframe: '1Day', range: upper };
-      break;
-    }
-    default: {
-      body = { symbol: normalizedSymbol, timeframe: '1Day', range: '6M' };
-    }
+  if (upper === '1D') {
+    params = windowFromDays('5Min', 2, nowMs);
+  } else if (upper === '5D') {
+    params = windowFromDays('15Min', 7, nowMs);
+  } else {
+    params = buildRangeBounds('1Day', upper, nowMs);
   }
 
-  const { data, error } = await supabase.functions.invoke(barsFunction, { body });
-
-  if (error) throw error;
-  return normalizeBarsPayload(data);
+  const bars = await fetchOHLC(normalizedSymbol, params.tf, params.startMs, params.endMs);
+  return normalizeBarsPayload({ bars });
 }
 
 interface SchwabQuote {

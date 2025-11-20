@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
-import { env } from '@/lib/env';
 import { normalizeBarsPayload } from '@/lib/bars';
+import { fetchOHLC, buildRangeBounds } from '@/lib/api/ohlc';
 import { isValidSymbol, normalizeSymbol } from '@/lib/symbols';
 import type { Bar } from '@/types/bars';
 
@@ -29,13 +28,10 @@ export function useHistoricalBars(symbol: string, timeframe: string, range = '6M
     enabled: isValidSymbol(symbol),
     staleTime: 15_000,
     queryFn: async () => {
-      const barsFunction = env.barsFunction || 'get-bars';
-      const normalizedTimeframe = timeframe?.trim?.();
-      const { data, error } = await supabase.functions.invoke(barsFunction, {
-        body: { symbol: normalizedSymbol, timeframe: normalizedTimeframe, range: normalizedRange },
-      });
-      if (error) throw error;
-      return normalizeBarsPayload(data);
+      const normalizedTimeframe = timeframe?.trim?.() || '1Day';
+      const params = buildRangeBounds(normalizedTimeframe, normalizedRange);
+      const bars = await fetchOHLC(normalizedSymbol, params.tf, params.startMs, params.endMs);
+      return normalizeBarsPayload({ bars });
     },
   });
 }

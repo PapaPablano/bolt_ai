@@ -6,6 +6,9 @@ import { allowedSymbolRegex, normalizeSymbol } from '@/lib/symbols';
 type TF = '1Min' | '5Min' | '10Min' | '15Min' | '1Hour' | '4Hour' | '1Day';
 type Range = '1M' | '3M' | '6M' | '1Y' | '2Y' | '5Y' | '10Y' | 'MAX';
 
+const backendBase = ((import.meta.env.VITE_BACKEND_URL as string | undefined) ?? 'http://localhost:8001').replace(/\/$/, '');
+const ohlcEndpoint = `${backendBase}/ohlc`;
+
 const normalizeTf = (value: string | undefined): TF => {
   const allowed: TF[] = ['1Min', '5Min', '10Min', '15Min', '1Hour', '4Hour', '1Day'];
   return allowed.find((tf) => tf === value) ?? '1Hour';
@@ -38,7 +41,7 @@ export function LiveChartDemoPage() {
       <div className="flex flex-col gap-3">
         <h1 className="text-2xl font-bold text-slate-50">Advanced Candle Chart</h1>
         <p className="text-slate-400">
-          Historical bars from <code className="text-slate-200">{env.barsFunction}</code>. Live updates via{' '}
+          Historical bars from <code className="text-slate-200">{ohlcEndpoint}</code>. Live updates via{' '}
           {env.alpacaWsUrl ? 'websocket' : 'quote polling fallback (1s)'} against{' '}
           <code className="text-slate-200">{env.quoteFunction}</code>. Composite intervals (10m/4h) are aggregated on
           the fly for both history and live ticks.
