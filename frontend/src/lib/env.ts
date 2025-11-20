@@ -7,5 +7,5 @@ export const env = {
   defaultTimeframe: (import.meta.env.VITE_DEFAULT_TIMEFRAME as string) || '1Hour',
   defaultRange: (import.meta.env.VITE_DEFAULT_RANGE as string) || '6M',
   // Optional WS proxy that handles provider auth server-side.
-  alpacaWsUrl: (import.meta.env.VITE_ALPACA_WS_URL as string) || '',
+  ohlcWsUrl: (import.meta.env.VITE_STREAM_WS_URL as string) || (import.meta.env.VITE_ALPACA_WS_URL as string) || '',
 };
