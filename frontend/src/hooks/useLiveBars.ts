@@ -49,7 +49,6 @@ export function useLiveBars(symbol: string, timeframe: TF, opts: LiveOptions = D
     setBar(null);
 
     const startPolling = () => {
-      let cancelled = false;
       let current: Bar | null = null;
       let lastBucketSec = -1;
       const quoteFn = env.quoteFunction || 'stock-quote';
@@ -84,7 +83,6 @@ export function useLiveBars(symbol: string, timeframe: TF, opts: LiveOptions = D
       }, opts.pollMs ?? DEFAULTS.pollMs!);
 
       return () => {
-        cancelled = true;
         window.clearInterval(id);
       };
     };

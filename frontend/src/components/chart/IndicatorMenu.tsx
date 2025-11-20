@@ -31,17 +31,6 @@ export function IndicatorMenu({ timeframe }: { timeframe: TF }) {
           </Row>
         </Section>
         <Separator />
-        <Section title="EMA">
-          <Row>
-            <Switch checked={preset.useEMA} onCheckedChange={(v) => updateTfPreset(timeframe, { useEMA: v })} />
-            <Param
-              label="Period"
-              value={preset.emaPeriod}
-              onChange={(n) => updateTfPreset(timeframe, { emaPeriod: numberChange(n, preset.emaPeriod) })}
-            />
-          </Row>
-        </Section>
-        <Separator />
         <Section title="Bollinger Bands">
           <Row>
             <Switch checked={preset.useBB} onCheckedChange={(v) => updateTfPreset(timeframe, { useBB: v })} />
@@ -58,49 +47,6 @@ export function IndicatorMenu({ timeframe }: { timeframe: TF }) {
           </Row>
         </Section>
         <Separator />
-        <Section title="RSI">
-          <Row>
-            <Switch checked={preset.useRSI} onCheckedChange={(v) => updateTfPreset(timeframe, { useRSI: v })} />
-            <Param
-              label="Period"
-              value={preset.rsiPeriod}
-              onChange={(n) => updateTfPreset(timeframe, { rsiPeriod: numberChange(n, preset.rsiPeriod) })}
-            />
-          </Row>
-        </Section>
-        <Separator />
-        <Section title="SuperTrend-AI">
-          <Row>
-            <Switch checked={!!preset.useSTAI} onCheckedChange={(v) => updateTfPreset(timeframe, { useSTAI: v })} />
-            {preset.useSTAI && (
-              <>
-                <Param
-                  label="ATR"
-                  value={preset.stAiAtrLen ?? 14}
-                  onChange={(n) => updateTfPreset(timeframe, { stAiAtrLen: numberChange(n, preset.stAiAtrLen ?? 14) })}
-                />
-                <Param
-                  label="Min"
-                  step="0.1"
-                  value={preset.stAiMin ?? 1.5}
-                  onChange={(n) => updateTfPreset(timeframe, { stAiMin: numberChange(n, preset.stAiMin ?? 1.5) })}
-                />
-                <Param
-                  label="Mid"
-                  step="0.1"
-                  value={preset.stAiMid ?? 2.0}
-                  onChange={(n) => updateTfPreset(timeframe, { stAiMid: numberChange(n, preset.stAiMid ?? 2.0) })}
-                />
-                <Param
-                  label="Max"
-                  step="0.1"
-                  value={preset.stAiMax ?? 3.0}
-                  onChange={(n) => updateTfPreset(timeframe, { stAiMax: numberChange(n, preset.stAiMax ?? 3.0) })}
-                />
-              </>
-            )}
-          </Row>
-        </Section>
         <Separator />
         <Section title="MACD">
           <Row>
