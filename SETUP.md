@@ -270,3 +270,130 @@ After successful setup:
 - [Vite Documentation](https://vitejs.dev/)
 - [React Documentation](https://react.dev/)
 - [Alpaca API Documentation](https://alpaca.markets/docs/)
+
+---
+
+## Seeding Timescale OHLCV (Local Dev & CI)
+
+Use this workflow to populate the `ohlcv` hypertable with synthetic 1‑minute bars so continuous aggregates, stitched views, and indicator workers return data without hitting production feeds.
+
+### When to run it
+
+- Local Timescale sidecar (or Supabase project) is empty for the symbols/timeframes you need.
+- CI/previews need deterministic fixtures.
+- Ingestion/backfill isn’t wired yet.
+
+Skip it if you already point at a populated Timescale instance.
+
+### Prerequisites
+
+- Timescale instance reachable via `DATABASE_URL` or `SUPABASE_DB_URL`.
+- Migrations have created `ohlcv`, `ca_*`, and `v_ohlc_*_stitched` views.
+- Python 3.10+ with `asyncpg` installed (run `pip install asyncpg`).
+
+### Quick start
+
+```bash
+export DATABASE_URL="postgresql://postgres:devpass@localhost:54329/ohlc_store"
+
+# Seed the 3 most-recent NYSE sessions (holiday-aware) and refresh CAs
+python scripts/seed_ohlcv.py \
+  --symbols AAPL,TSLA,MSFT \
+  --days 3 \
+  --holiday-aware
+
+# Large clean-table backfill (COPY fast path)
+python scripts/seed_ohlcv.py \
+  --symbols AAPL,MSFT,TSLA,SPY \
+  --days 5 \
+  --copy
+
+# Validate results
+psql "$DATABASE_URL" -f scripts/sql/validate_ca.sql
+```
+
+By default the seeder aligns intraday refreshes to **09:30 ET** and daily refreshes to **00:00 ET**, keeping DST transitions deterministic. Pass `--calendar auto|none` to toggle exchange-calendar awareness (auto tries `exchange_calendars`, falls back to `pandas_market_calendars`, otherwise reuses the static weekday/holiday list).
+
+### CI recipe
+
+```bash
+python scripts/seed_ohlcv.py --symbols AAPL,MSFT --days 2 --seed 42
+psql "$DATABASE_URL" -f scripts/sql/validate_ca.sql
+```
+
+Or refresh separately:
+
+```bash
+python scripts/seed_ohlcv.py --symbols AAPL,MSFT --days 2 --skip-refresh
+psql "$DATABASE_URL" -f scripts/sql/refresh_all_cas.sql
+psql "$DATABASE_URL" -f scripts/sql/validate_ca.sql
+```
+
+### Validation SQL
+
+`scripts/sql/validate_ca.sql` contains:
+
+```sql
+-- Row counts per symbol
+SELECT symbol, count(*) FROM ohlcv GROUP BY 1 ORDER BY 1;
+
+-- Guard against off-session buckets
+SELECT count(*) FROM ca_5m
+WHERE (bucket AT TIME ZONE 'America/New_York')::time < TIME '09:30'
+   OR (bucket AT TIME ZONE 'America/New_York')::time >= TIME '16:00';
+
+-- Detect duplicate stitched buckets
+SELECT symbol, bucket, count(*) FROM ca_5m
+GROUP BY 1,2 HAVING count(*) > 1;
+
+-- Ensure stitched live-head doesn’t overlap historical CA
+WITH last_ca AS (
+  SELECT symbol, max(bucket) AS last FROM ca_5m GROUP BY 1
+)
+SELECT l.symbol, count(*) FROM last_ca l
+JOIN v_ohlc_5m_stitched v
+  ON v.symbol = l.symbol
+ AND v.bucket <= l.last
+GROUP BY 1;
+```
+
+### Optional Makefile shortcuts
+
+```makefile
+.PHONY: seed seed-copy validate refresh-ca
+DB_URL ?= postgresql://postgres:devpass@localhost:54329/ohlc_store
+SYMBOLS ?= AAPL,MSFT,TSLA,SPY
+DAYS ?= 3
+HOLIDAY ?= 1
+
+seed:
+	DATABASE_URL=$(DB_URL) python scripts/seed_ohlcv.py \
+	  --symbols $(SYMBOLS) --days $(DAYS) \
+	  $(if $(filter 1,$(HOLIDAY)),--holiday-aware,)
+
+seed-copy:
+	DATABASE_URL=$(DB_URL) python scripts/seed_ohlcv.py \
+	  --symbols $(SYMBOLS) --days $(DAYS) --copy \
+	  $(if $(filter 1,$(HOLIDAY)),--holiday-aware,)
+
+validate:
+	psql "$(DB_URL)" -f scripts/sql/validate_ca.sql
+
+refresh-ca:
+	psql "$(DB_URL)" -f scripts/sql/refresh_all_cas.sql
+```
+
+### Troubleshooting & cleanup
+
+- **Empty stitched views**: rerun CA refresh (`psql -f scripts/sql/refresh_all_cas.sql`).
+- **Unique constraint errors**: ensure your hypertable uses `(symbol, ts)` or `(symbol, time)`; the seeder auto-detects the column.
+- **Slow backfills**: use `--copy` on clean ranges/tables, or reduce `--batch-size` per symbol.
+- **Delete seeded data**:
+
+  ```sql
+  DELETE FROM ohlcv
+   WHERE symbol = 'AAPL'
+     AND time >= '2024-10-01'::timestamptz
+     AND time <  '2024-10-08'::timestamptz;
+  -- Replace `time` with `ts` if that’s your column name.
+  ```

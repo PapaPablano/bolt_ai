@@ -12,7 +12,7 @@ import random
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from math import floor
-from typing import List, Sequence, Tuple
+from typing import Any, List, Sequence, Tuple
 from zoneinfo import ZoneInfo
 
 import asyncpg
@@ -44,6 +44,9 @@ class SeederConfig:
     batch_size: int
     holiday_aware: bool
     use_copy: bool
+    calendar: str
+    end_date: date
+    day_count: int
 
 
 def parse_args() -> SeederConfig:
@@ -109,6 +112,15 @@ def parse_args() -> SeederConfig:
             "may fail if rows already exist)."
         ),
     )
+    parser.add_argument(
+        "--calendar",
+        choices=("auto", "none"),
+        default="auto",
+        help=(
+            "Use an exchange calendar for holidays/early closes (auto) or "
+            "static rules (none)."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -138,6 +150,9 @@ def parse_args() -> SeederConfig:
         batch_size=max(1, args.batch_size),
         holiday_aware=args.holiday_aware,
         use_copy=args.use_copy,
+        calendar=args.calendar,
+        end_date=args.end_date,
+        day_count=args.days,
     )
 
 
@@ -292,6 +307,90 @@ def _base_price(symbol: str) -> float:
     return presets.get(symbol, 100.0 + (hash(symbol) % 300))
 
 
+def _get_calendar() -> Tuple[str | None, Any | None]:
+    """Attempt to load an exchange calendar for NYSE sessions."""
+
+    try:
+        import exchange_calendars as xc
+
+        return "xc", xc.get_calendar("XNYS")
+    except Exception:
+        pass
+
+    try:
+        import pandas_market_calendars as mcal
+
+        return "pmc", mcal.get_calendar("NYSE")
+    except Exception:
+        pass
+
+    return None, None
+
+
+def _sessions_from_calendar(
+    end_date: date,
+    count: int,
+    cal_kind: str,
+    calendar_obj: Any,
+) -> List[date]:
+    import pandas as pd
+
+    start = end_date - timedelta(days=60)
+    if cal_kind == "xc":
+        sessions = calendar_obj.sessions_in_range(
+            pd.Timestamp(start, tz="UTC"),
+            pd.Timestamp(end_date, tz="UTC"),
+        )
+        session_dates = [ts.date() for ts in sessions]
+    elif cal_kind == "pmc":
+        schedule = calendar_obj.schedule(
+            start_date=start.strftime("%Y-%m-%d"),
+            end_date=end_date.strftime("%Y-%m-%d"),
+        )
+        session_dates = [ts.date() for ts in schedule.index]
+    else:
+        raise RuntimeError("Unsupported calendar kind")
+
+    if not session_dates:
+        return []
+    return session_dates[-count:]
+
+
+def _session_minutes_from_calendar(
+    session_date: date,
+    cal_kind: str | None,
+    calendar_obj: Any,
+) -> List[datetime]:
+    if cal_kind is None or calendar_obj is None:
+        return _session_minutes(session_date)
+
+    import pandas as pd
+
+    if cal_kind == "xc":
+        label = pd.Timestamp(session_date, tz="UTC")
+        m_open = calendar_obj.session_open(label).tz_convert(NY_TZ)
+        m_close = calendar_obj.session_close(label).tz_convert(NY_TZ)
+    elif cal_kind == "pmc":
+        schedule = calendar_obj.schedule(
+            start_date=session_date.strftime("%Y-%m-%d"),
+            end_date=session_date.strftime("%Y-%m-%d"),
+        )
+        if schedule.empty:
+            return []
+        row = schedule.iloc[0]
+        m_open = row["market_open"].tz_convert(NY_TZ)
+        m_close = row["market_close"].tz_convert(NY_TZ)
+    else:
+        return _session_minutes(session_date)
+
+    minutes: List[datetime] = []
+    current = m_open
+    while current < m_close:
+        minutes.append(current)
+        current += timedelta(minutes=1)
+    return minutes
+
+
 async def _insert_batches(
     conn: asyncpg.Connection,
     time_column: str,
@@ -378,12 +477,43 @@ async def _refresh_cas(
 
 async def seed_data(config: SeederConfig) -> None:
     rng = random.Random(config.seed)
-    minutes_by_day = {day: _session_minutes(day) for day in config.trading_days}
+
+    cal_kind: str | None = None
+    calendar_obj: Any | None = None
+    if config.calendar == "auto":
+        cal_kind, calendar_obj = _get_calendar()
+        if cal_kind is None:
+            print("Calendar auto-detect failed; falling back to static schedule.")
+
+    if cal_kind is not None and calendar_obj is not None:
+        trading_days = _sessions_from_calendar(
+            config.end_date,
+            config.day_count,
+            cal_kind,
+            calendar_obj,
+        )
+    else:
+        trading_days = list(config.trading_days)
+
+    if not trading_days:
+        print("No trading sessions resolved; aborting seed.")
+        return
+
+    minutes_by_day: dict[date, List[datetime]] = {}
+    for day in trading_days:
+        if cal_kind is not None and calendar_obj is not None:
+            minutes = _session_minutes_from_calendar(day, cal_kind, calendar_obj)
+            if not minutes:
+                minutes = _session_minutes(day)
+        else:
+            minutes = _session_minutes(day)
+        minutes_by_day[day] = minutes
+
     all_rows: List[Tuple[str, datetime, float, float, float, float, int]] = []
 
     for symbol in config.symbols:
         symbol_rng = random.Random(rng.randint(0, 1_000_000))
-        for day in config.trading_days:
+        for day in trading_days:
             bars = _generate_bars(symbol, minutes_by_day[day], symbol_rng)
             all_rows.extend(bars)
 
