@@ -16,14 +16,22 @@ const LINE_STYLES = {
   j: { color: '#a855f7' },
 } as const;
 
+type LineWidths = { k?: 1 | 2 | 3 | 4; d?: 1 | 2 | 3 | 4; j?: 1 | 2 | 3 | 4 };
+
+const clampWidth = (value?: number): 1 | 2 | 3 | 4 => {
+  const n = Math.round(Number(value ?? 2));
+  return Math.max(1, Math.min(4, n)) as 1 | 2 | 3 | 4;
+};
+
 type Props = {
   height?: number;
   k: LinePt[];
   d: LinePt[];
   j: LinePt[];
+  lineWidths?: LineWidths;
 };
 
-export default function PaneKDJ({ height = 120, k, d, j }: Props) {
+export default function PaneKDJ({ height = 120, k, d, j, lineWidths }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
   const kRef = useRef<ISeriesApi<'Line'> | null>(null);
@@ -44,9 +52,21 @@ export default function PaneKDJ({ height = 120, k, d, j }: Props) {
       timeScale: { secondsVisible: false, borderVisible: false },
     });
 
-    kRef.current = chart.addLineSeries({ lineWidth: 1, priceLineVisible: false, color: LINE_STYLES.k.color });
-    dRef.current = chart.addLineSeries({ lineWidth: 1, priceLineVisible: false, color: LINE_STYLES.d.color });
-    jRef.current = chart.addLineSeries({ lineWidth: 1, priceLineVisible: false, color: LINE_STYLES.j.color });
+    kRef.current = chart.addLineSeries({
+      lineWidth: clampWidth(lineWidths?.k),
+      priceLineVisible: false,
+      color: LINE_STYLES.k.color,
+    });
+    dRef.current = chart.addLineSeries({
+      lineWidth: clampWidth(lineWidths?.d),
+      priceLineVisible: false,
+      color: LINE_STYLES.d.color,
+    });
+    jRef.current = chart.addLineSeries({
+      lineWidth: clampWidth(lineWidths?.j),
+      priceLineVisible: false,
+      color: LINE_STYLES.j.color,
+    });
     chartRef.current = chart;
 
     const handleResize = () => {
@@ -64,6 +84,12 @@ export default function PaneKDJ({ height = 120, k, d, j }: Props) {
       jRef.current = null;
     };
   }, [height]);
+
+  useEffect(() => {
+    kRef.current?.applyOptions({ lineWidth: clampWidth(lineWidths?.k) });
+    dRef.current?.applyOptions({ lineWidth: clampWidth(lineWidths?.d) });
+    jRef.current?.applyOptions({ lineWidth: clampWidth(lineWidths?.j) });
+  }, [lineWidths?.k, lineWidths?.d, lineWidths?.j]);
 
   useEffect(() => {
     if (!kRef.current) return;

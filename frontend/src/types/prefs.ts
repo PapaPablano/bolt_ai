@@ -1,3 +1,5 @@
+import type { IndicatorStylePrefs } from './indicator-styles';
+
 export type TF = '1Min' | '5Min' | '10Min' | '15Min' | '1Hour' | '4Hour' | '1Day';
 export type Range = '1M' | '3M' | '6M' | '1Y' | '2Y' | '5Y' | '10Y' | 'MAX';
 
@@ -50,6 +52,7 @@ export type ChartPrefs = {
   kdjKSmooth?: number;
   kdjDSmooth?: number;
   kdjSessionAnchored?: boolean;
+  styles?: IndicatorStylePrefs;
 };
 
 export const DEFAULT_TF: TF = '1Hour';

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import type { ChartPrefs, TF, Range, TfPreset } from '@/types/prefs';
 import { DEFAULT_PRESETS, DEFAULT_RANGE, DEFAULT_TF } from '@/types/prefs';
+import { DEFAULT_INDICATOR_STYLE_PREFS, cloneIndicatorStylePrefs, type IndicatorStylePrefs } from '@/types/indicator-styles';
 
 const LS_KEY = 'chart_prefs_v2';
 const LEGACY_KEYS = ['chart_prefs_v1'];
@@ -16,6 +17,7 @@ const mergeDefaults = (p?: Partial<ChartPrefs>): ChartPrefs => {
     default_timeframe: (p?.default_timeframe ?? DEFAULT_TF) as TF,
     default_range: (p?.default_range ?? DEFAULT_RANGE) as Range,
     presets,
+    styles: cloneIndicatorStylePrefs(p?.styles ?? DEFAULT_INDICATOR_STYLE_PREFS),
   };
 };
 
@@ -72,6 +74,7 @@ export function useChartPrefs() {
           default_timeframe: initial.default_timeframe,
           default_range: initial.default_range,
           presets: initial.presets,
+          styles: initial.styles,
         });
         setPrefs(initial);
       } else {
@@ -102,6 +105,7 @@ export function useChartPrefs() {
           default_timeframe: prefs.default_timeframe,
           default_range: prefs.default_range,
           presets: prefs.presets,
+          styles: prefs.styles,
         });
     }, 400) as unknown as number;
 
@@ -118,6 +122,8 @@ export function useChartPrefs() {
     setPrefs((p) => ({ ...p, presets: { ...p.presets, [tf]: { ...p.presets[tf], ...patch } } }));
   const setDefaultTf = (tf: TF) => setPrefs((p) => ({ ...p, default_timeframe: tf }));
   const setDefaultRange = (range: Range) => setPrefs((p) => ({ ...p, default_range: range }));
+  const setIndicatorStyles = (styles: IndicatorStylePrefs) =>
+    setPrefs((p) => ({ ...p, styles: cloneIndicatorStylePrefs(styles) }));
 
-  return { loading, prefs, getTfPreset, updateTfPreset, setDefaultTf, setDefaultRange };
+  return { loading, prefs, getTfPreset, updateTfPreset, setDefaultTf, setDefaultRange, setIndicatorStyles };
 }

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as LWC from 'lightweight-charts';
-import type { HistogramData, ISeriesApi, LineData, Time, TimeRange } from 'lightweight-charts';
+import type { BusinessDay, CandlestickData, HistogramData, ISeriesApi, Time, UTCTimestamp } from 'lightweight-charts';
 import type { TF, Range, TfPreset } from '@/types/prefs';
 import type { Bar as ApiBar } from '@/types/bars';
 import { useChartPrefs } from '@/hooks/useChartPrefs';
+import type { IndicatorStylePrefs } from '@/types/indicator-styles';
+import { cloneIndicatorStylePrefs } from '@/types/indicator-styles';
 import { useHistoricalBars } from '@/hooks/useHistoricalBars';
 import { useLiveBars } from '@/hooks/useLiveBars';
 import { useProbeToggle } from '@/hooks/useProbeToggle';
@@ -16,6 +18,7 @@ import type { LinePt, StPerfParams } from '@/utils/indicators-supertrend-perf';
 import { assertBucketInvariant } from '@/utils/devInvariants';
 import { downsampleOhlcVisible } from '@/utils/ohlc-decimator';
 import { IndicatorPanel, type KdjPanelParams } from '@/components/IndicatorPanel';
+import type { PanelIndicatorName } from '@/types/indicators';
 import { ChartProbe } from './ChartProbe';
 import { IndicatorMenu } from './IndicatorMenu';
 import { IntervalBar } from './IntervalBar';
@@ -25,6 +28,8 @@ import PaneKDJ from './PaneKDJ';
 
 type Props = { symbol: string; initialTf?: TF; initialRange?: Range; height?: number };
 type ProbeState = { ok: boolean; error?: string; lastEvent?: string };
+type WorkerIndicatorName = Exclude<PanelIndicatorName, 'KDJ'>;
+type ChartTimeRange = { from: Time | null; to: Time | null };
 
 const envVars = import.meta.env as Record<string, string | undefined>;
 const tvFlag = (envVars.VITE_CHART_VENDOR ?? envVars.VITE_USE_TRADINGVIEW ?? '').toLowerCase();
@@ -51,7 +56,7 @@ const etFormatter = new Intl.DateTimeFormat('en-US', {
 type EtParts = { year: number; month: number; day: number; hour: number; minute: number; second: number; weekday: string };
 export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initialRange = '1Y', height = 520 }: Props) {
   const { enabled: probeEnabled } = useProbeToggle();
-  const { loading: prefsLoading, prefs, getTfPreset, setDefaultTf, setDefaultRange, updateTfPreset } = useChartPrefs();
+  const { loading: prefsLoading, prefs, getTfPreset, setDefaultTf, setDefaultRange, updateTfPreset, setIndicatorStyles } = useChartPrefs();
   const tf: TF = prefs.default_timeframe ?? initialTf;
   const range: Range = prefs.default_range ?? initialRange;
   const preset = getTfPreset(tf);
@@ -106,15 +111,15 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const handleWorkerOverlayFull = useCallback((name: string, series: LinePt[], aux?: Record<string, unknown>) => {
     if (!series?.length) return;
     if (name === 'STAI' && aux?.factor && import.meta.env.DEV) console.debug('[indicator][stai] factor', aux.factor);
-    if (name === 'STAI') overlays.current.stai?.setData(mapPointsForChart(normalizeWorkerSeries(series)));
-    if (name === 'EMA') overlays.current.ema?.setData(mapPointsForChart(normalizeWorkerSeries(series)));
-    if (name === 'RSI') rsiSeriesRef.current?.setData(mapPointsForChart(normalizeWorkerSeries(series)));
-    if (name === 'VWAP') overlays.current.vwap?.setData(mapPointsForChart(normalizeWorkerSeries(series)));
+    if (name === 'STAI') overlays.current.stai?.setData(mapLinePoints(normalizeWorkerSeries(series)));
+    if (name === 'EMA') overlays.current.ema?.setData(mapLinePoints(normalizeWorkerSeries(series)));
+    if (name === 'RSI') rsiSeriesRef.current?.setData(mapLinePoints(normalizeWorkerSeries(series)));
+    if (name === 'VWAP') overlays.current.vwap?.setData(mapLinePoints(normalizeWorkerSeries(series)));
   }, []);
 
   const handleWorkerOverlayPatch = useCallback((name: string, point: LinePt) => {
     if (!Number.isFinite(point.value)) return;
-    const formatted = formatPointForChart(point);
+    const formatted = formatLinePoint(point);
     if (name === 'STAI') overlays.current.stai?.update(formatted);
     if (name === 'EMA') overlays.current.ema?.update(formatted);
     if (name === 'RSI') rsiSeriesRef.current?.update(formatted);
@@ -123,29 +128,28 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
 
   const handleWorkerOverlayFullMulti = useCallback((name: string, series: Record<string, LinePt[]>) => {
     if (name === 'BB' && overlays.current.bbm && overlays.current.bbu && overlays.current.bbl) {
-      overlays.current.bbm.setData(mapPointsForChart(normalizeWorkerSeries(series.mid ?? [])));
-      overlays.current.bbu.setData(mapPointsForChart(normalizeWorkerSeries(series.up ?? [])));
-      overlays.current.bbl.setData(mapPointsForChart(normalizeWorkerSeries(series.lo ?? [])));
+      overlays.current.bbm.setData(mapLinePoints(normalizeWorkerSeries(series.mid ?? [])));
+      overlays.current.bbu.setData(mapLinePoints(normalizeWorkerSeries(series.up ?? [])));
+      overlays.current.bbl.setData(mapLinePoints(normalizeWorkerSeries(series.lo ?? [])));
     }
     if (name === 'MACD' && macdLineRef.current && macdSigRef.current && macdHistRef.current) {
-      macdLineRef.current.setData(mapPointsForChart(normalizeWorkerSeries(series.macd ?? [])));
-      macdSigRef.current.setData(mapPointsForChart(normalizeWorkerSeries(series.signal ?? [])));
-      const hist = normalizeWorkerSeries(series.hist ?? []).map((pt) => ({ time: pt.time, value: pt.value } as HistogramData));
-      macdHistRef.current.setData(mapPointsForChart(hist));
+      macdLineRef.current.setData(mapLinePoints(normalizeWorkerSeries(series.macd ?? [])));
+      macdSigRef.current.setData(mapLinePoints(normalizeWorkerSeries(series.signal ?? [])));
+      const hist = normalizeWorkerSeries(series.hist ?? []);
+      macdHistRef.current.setData(mapHistogramPoints(hist));
     }
   }, []);
 
   const handleWorkerOverlayPatchMulti = useCallback((name: string, point: Record<string, LinePt>) => {
     if (name === 'BB' && overlays.current.bbm && overlays.current.bbu && overlays.current.bbl) {
-      if (point.mid) overlays.current.bbm.update(formatPointForChart(point.mid));
-      if (point.up) overlays.current.bbu.update(formatPointForChart(point.up));
-      if (point.lo) overlays.current.bbl.update(formatPointForChart(point.lo));
+      if (point.mid) overlays.current.bbm.update(formatLinePoint(point.mid));
+      if (point.up) overlays.current.bbu.update(formatLinePoint(point.up));
+      if (point.lo) overlays.current.bbl.update(formatLinePoint(point.lo));
     }
     if (name === 'MACD' && macdLineRef.current && macdSigRef.current && macdHistRef.current) {
-      if (point.macd) macdLineRef.current.update(formatPointForChart(point.macd));
-      if (point.signal) macdSigRef.current.update(formatPointForChart(point.signal));
-      if (point.hist)
-        macdHistRef.current.update(formatPointForChart(point.hist) as HistogramData);
+      if (point.macd) macdLineRef.current.update(formatLinePoint(point.macd));
+      if (point.signal) macdSigRef.current.update(formatLinePoint(point.signal));
+      if (point.hist) macdHistRef.current.update(formatHistogramPoint(point.hist));
     }
   }, []);
 
@@ -158,10 +162,23 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     const next = patch[patch.length - 1];
     if (!next) return prev;
     if (prev.length && prev[prev.length - 1].time === next.time) {
-      return [...prev.slice(0, - 1), next];
+      return [...prev.slice(0, -1), next];
     }
     return [...prev, next];
   }, []);
+
+  const indicatorToggles = useMemo<Record<PanelIndicatorName, boolean>>(
+    () => ({
+      STAI: !!preset.useSTPerf,
+      EMA: !!preset.useEMA,
+      RSI: !!preset.useRSI,
+      VWAP: !!preset.useVWAP,
+      BB: !!preset.useBB,
+      MACD: !!preset.useMACD,
+      KDJ: !!preset.useKDJ,
+    }),
+    [preset.useSTPerf, preset.useEMA, preset.useRSI, preset.useVWAP, preset.useBB, preset.useMACD, preset.useKDJ],
+  );
 
   const indicatorWorker = useIndicatorWorker(symbol, tf, {
     onOverlayFull: handleWorkerOverlayFull,
@@ -184,11 +201,6 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       },
     },
   });
-
-  const kdjPaneK = useMemo<LineData[]>(() => mapPointsForChart(normalizeWorkerSeries(kdjK)) as LineData[], [kdjK]);
-  const kdjPaneD = useMemo<LineData[]>(() => mapPointsForChart(normalizeWorkerSeries(kdjD)) as LineData[], [kdjD]);
-  const kdjPaneJ = useMemo<LineData[]>(() => mapPointsForChart(normalizeWorkerSeries(kdjJ)) as LineData[], [kdjJ]);
-  const showKdjPane = indicatorToggles.KDJ && (kdjPaneK.length || kdjPaneD.length || kdjPaneJ.length);
 
   const applyVisibleDecimation = useCallback(
     (range: { from: number; to: number } | null) => {
@@ -226,9 +238,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     [tf],
   );
 
-  type PanelIndicatorName = 'STAI' | 'EMA' | 'RSI' | 'VWAP' | 'BB' | 'MACD' | 'KDJ';
-type WorkerIndicatorName = Exclude<PanelIndicatorName, 'KDJ'>;
-  const stPanelDefaults = useMemo(() => buildStPerfParams(preset), [preset]);
+    const stPanelDefaults = useMemo(() => buildStPerfParams(preset), [preset]);
   const bbPanelDefaults = useMemo(() => ({ period: preset.bbPeriod, mult: preset.bbMult }), [preset.bbPeriod, preset.bbMult]);
   const macdPanelDefaults = useMemo(
     () => ({ fast: preset.macdFast ?? 12, slow: preset.macdSlow ?? 26, signal: preset.macdSignal ?? 9 }),
@@ -244,22 +254,69 @@ type WorkerIndicatorName = Exclude<PanelIndicatorName, 'KDJ'>;
     }),
     [preset.kdjPeriod, preset.kdjKSmooth, preset.kdjDSmooth, preset.kdjSessionAnchored],
   );
-  const indicatorToggles = useMemo<Record<PanelIndicatorName, boolean>>(
-    () => ({
-      STAI: !!preset.useSTPerf,
-      EMA: !!preset.useEMA,
-      RSI: !!preset.useRSI,
-      VWAP: !!preset.useVWAP,
-      BB: !!preset.useBB,
-      MACD: !!preset.useMACD,
-      KDJ: !!preset.useKDJ,
-    }),
-    [preset.useSTPerf, preset.useEMA, preset.useRSI, preset.useVWAP, preset.useBB, preset.useMACD, preset.useKDJ],
-  );
   const indicatorPanelInitials = useMemo(
     () => ({ st: stPanelDefaults, bb: bbPanelDefaults, macd: macdPanelDefaults, vwap: vwapPanelDefaults, kdj: kdjPanelDefaults }),
     [bbPanelDefaults, macdPanelDefaults, stPanelDefaults, vwapPanelDefaults, kdjPanelDefaults],
   );
+  const showKdjPane = indicatorToggles.KDJ && (kdjK.length || kdjD.length || kdjJ.length);
+
+  const [stylePrefs, setStylePrefs] = useState<IndicatorStylePrefs>(() => cloneIndicatorStylePrefs(prefs.styles));
+
+  useEffect(() => {
+    setStylePrefs(cloneIndicatorStylePrefs(prefs.styles));
+  }, [prefs.styles]);
+
+  const kdjLineWidths = useMemo(
+    () => ({
+      k: clampLineWidth(stylePrefs.perIndicator?.kdjK?.lineWidth ?? stylePrefs.global.lineWidth ?? 2),
+      d: clampLineWidth(stylePrefs.perIndicator?.kdjD?.lineWidth ?? stylePrefs.global.lineWidth ?? 2),
+      j: clampLineWidth(stylePrefs.perIndicator?.kdjJ?.lineWidth ?? stylePrefs.global.lineWidth ?? 2),
+    }),
+    [stylePrefs],
+  );
+
+  // --- styles → series application --------------------------------------------
+  const applyIndicatorStyles = useCallback(
+    (styles: IndicatorStylePrefs) => {
+      const effWidth = (override?: number) => clampLineWidth(override ?? styles.global.lineWidth ?? 2);
+
+      overlays.current.stai?.applyOptions({ lineWidth: effWidth(styles.perIndicator?.stAi?.lineWidth) });
+      overlays.current.ema?.applyOptions({ lineWidth: effWidth(styles.perIndicator?.ema?.lineWidth) });
+      overlays.current.vwap?.applyOptions({ lineWidth: effWidth(styles.perIndicator?.vwap?.lineWidth) });
+
+      const bbWidth = effWidth(styles.perIndicator?.bb?.lineWidth);
+      overlays.current.bbu?.applyOptions({ lineWidth: bbWidth });
+      overlays.current.bbm?.applyOptions({ lineWidth: bbWidth });
+      overlays.current.bbl?.applyOptions({ lineWidth: bbWidth });
+
+      rsiSeriesRef.current?.applyOptions({ lineWidth: effWidth(styles.perIndicator?.rsi?.lineWidth) });
+      macdLineRef.current?.applyOptions({ lineWidth: effWidth(styles.perIndicator?.macdLine?.lineWidth) });
+      macdSigRef.current?.applyOptions({ lineWidth: effWidth(styles.perIndicator?.macdSignal?.lineWidth) });
+
+      const histThickness = styles.perIndicator?.macdHist?.histThickness ?? styles.global.histThickness ?? 'normal';
+      if (macdChartRef.current) {
+        const scale = macdChartRef.current.timeScale();
+        const SPACING_TARGETS: Record<'thin' | 'normal' | 'wide', number> = { thin: 5, normal: 7, wide: 9 };
+        scale.applyOptions({ barSpacing: SPACING_TARGETS[histThickness] });
+      }
+    },
+    [],
+  );
+
+  const handleStylePrefsChange = useCallback(
+    (next: IndicatorStylePrefs) => {
+      setStylePrefs(next);
+      setIndicatorStyles(next);
+      applyIndicatorStyles(next);
+    },
+    [setIndicatorStyles, applyIndicatorStyles],
+  );
+
+  useEffect(() => {
+    if (candleRef.current) {
+      applyIndicatorStyles(stylePrefs);
+    }
+  }, [applyIndicatorStyles, stylePrefs]);
 
   const persistStParams = useCallback(
     (params: Partial<StPerfParams>) => {
@@ -392,8 +449,8 @@ type WorkerIndicatorName = Exclude<PanelIndicatorName, 'KDJ'>;
       indicatorWorker.setVwapParams(params);
       persistVwapParams(params);
       if (params.mult !== undefined && overlays.current.vwap) {
-        const width = Math.max(1, Math.min(4, params.mult));
-        overlays.current.vwap.applyOptions({ lineWidth: width });
+        const width = clampLineWidth(params.mult);
+        overlays.current.vwap?.applyOptions({ lineWidth: width });
       }
     },
     [indicatorWorker, persistVwapParams],
@@ -429,7 +486,7 @@ type WorkerIndicatorName = Exclude<PanelIndicatorName, 'KDJ'>;
 
   useEffect(() => {
     if (overlays.current.vwap) {
-      const width = Math.max(1, Math.min(4, vwapPanelDefaults.mult));
+      const width = clampLineWidth(vwapPanelDefaults.mult);
       overlays.current.vwap.applyOptions({ lineWidth: width });
     }
   }, [vwapPanelDefaults]);
@@ -449,7 +506,7 @@ type WorkerIndicatorName = Exclude<PanelIndicatorName, 'KDJ'>;
     const chart = chartRef.current;
     if (!chart) return;
     const scale = chart.timeScale();
-    const handler = (range: TimeRange | null) => {
+    const handler = (range: ChartTimeRange | null) => {
       const next = toSecondsVisibleRange(range);
       if (rangeThrottleRef.current != null) return;
       rangeThrottleRef.current = requestAnimationFrame(() => {
@@ -506,7 +563,6 @@ type WorkerIndicatorName = Exclude<PanelIndicatorName, 'KDJ'>;
       candleRef.current = chart.addCandlestickSeries({
         lastValueVisible: true,
         priceLineVisible: true,
-        lastPriceAnimation: 1,
       });
       setProbeState({ ok: true, lastEvent: 'init', error: undefined });
       if (import.meta.env.DEV) console.debug('[chart] init complete');
@@ -787,6 +843,8 @@ type WorkerIndicatorName = Exclude<PanelIndicatorName, 'KDJ'>;
         onSetMacdParams={handleMacdParamChange}
         onSetVwapParams={handleVwapParamChange}
         onSetKdjParams={handleKdjParamChange}
+        stylePrefs={stylePrefs}
+        onChangeStyles={handleStylePrefsChange}
       />
 
       <div className="relative">
@@ -800,7 +858,7 @@ type WorkerIndicatorName = Exclude<PanelIndicatorName, 'KDJ'>;
       </div>
       {preset.useRSI && <div ref={rsiRef} className="w-full" style={{ minHeight: 140 }} />}
       {preset.useMACD && <div ref={macdRef} className="w-full" style={{ minHeight: 180 }} />}
-      {showKdjPane && <PaneKDJ k={kdjPaneK} d={kdjPaneD} j={kdjPaneJ} />}
+      {showKdjPane && <PaneKDJ k={kdjK} d={kdjD} j={kdjJ} lineWidths={kdjLineWidths} />}
 
       {showProbe && (
         <ChartProbe
@@ -856,14 +914,24 @@ function updateIndicatorLastPoints(
 
 const toCandle = (bar: ChartBar) => ({ ...bar, volume: bar.volume ?? 0 });
 const fromChartTimeValue = (value: Time) => {
-  if (typeof value === 'number') return USING_TV ? Math.floor(value / 1000) : value;
-  const timestamp = Date.UTC(value.year, value.month - 1, value.day);
-  return Math.floor(timestamp / 1000);
+  if (typeof value === 'number') {
+    return USING_TV ? Math.floor(value / 1000) : value;
+  }
+  if (typeof value === 'string') {
+    const [y, m, d] = value.split('-').map(Number);
+    const ts = Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1);
+    return Math.floor(ts / 1000);
+  }
+  const bd = value as BusinessDay;
+  const ts = Date.UTC(bd.year, (bd.month ?? 1) - 1, bd.day ?? 1);
+  return Math.floor(ts / 1000);
 };
-const toSecondsVisibleRange = (range: TimeRange | null): { from: number; to: number } | null => {
+
+const toSecondsVisibleRange = (range: ChartTimeRange | null): { from: number; to: number } | null => {
   if (!range || range.from == null || range.to == null) return null;
   return { from: fromChartTimeValue(range.from), to: fromChartTimeValue(range.to) };
 };
+
 const buildStPerfParams = (preset: TfPreset): StPerfParams => ({
   atrSpan: preset.stPerfAtrSpan ?? 14,
   factorMin: preset.stPerfMin ?? 1.2,
@@ -876,13 +944,47 @@ const buildStPerfParams = (preset: TfPreset): StPerfParams => ({
   useAMA: !!preset.stPerfUseAMA,
   applyImmediateOnFlip: !!preset.stPerfApplyImmediateOnFlip,
 });
-const toChartTime = (timeSec: number) => (USING_TV ? timeSec * 1000 : timeSec);
-const formatBarForChart = (bar: ChartBar): ChartBar => (USING_TV ? { ...bar, time: toChartTime(bar.time) } : bar);
-const mapBarsForChart = (bars: ChartBar[]): ChartBar[] => (USING_TV ? bars.map((b) => formatBarForChart(b)) : bars);
-const formatPointForChart = <T extends { time: number }>(point: T): T =>
-  (USING_TV ? ({ ...point, time: toChartTime(point.time) } as T) : point);
-const mapPointsForChart = <T extends { time: number }>(pts: T[]): T[] =>
-  (USING_TV ? pts.map((p) => formatPointForChart(p)) : pts);
+const toChartTime = (timeSec: number): Time => {
+  if (USING_TV) {
+    return (timeSec * 1000) as Time;
+  }
+  return (timeSec as UTCTimestamp) as Time;
+};
+const formatBarForChart = (bar: ChartBar): CandlestickData<Time> => ({
+  time: toChartTime(bar.time),
+  open: bar.open,
+  high: bar.high,
+  low: bar.low,
+  close: bar.close,
+});
+const mapBarsForChart = (bars: ChartBar[]): CandlestickData<Time>[] => bars.map((b) => formatBarForChart(b));
+const formatPointForChart = <T extends { time: number }>(point: T): T & { time: Time } =>
+  ({ ...point, time: toChartTime(point.time) } as T & { time: Time });
+const mapPointsForChart = <T extends { time: number }>(pts: T[]): (T & { time: Time })[] =>
+  pts.map((p) => formatPointForChart(p));
+
+// Clamp to supported Lightweight Charts width range (1..4)
+const clampLineWidth = (w: number | undefined): 1 | 2 | 3 | 4 => {
+  const n = Math.round(Number(w ?? 2));
+  return Math.max(1, Math.min(4, n)) as 1 | 2 | 3 | 4;
+};
+
+// Line helpers
+const formatLinePoint = <T extends { time: number; value: number }>(pt: T) => ({
+  ...pt,
+  time: toChartTime(pt.time),
+});
+
+const mapLinePoints = <T extends { time: number; value: number }>(pts: T[]) => pts.map((p) => formatLinePoint(p));
+
+// Histogram helpers
+const formatHistogramPoint = <T extends { time: number; value: number }>(pt: T): HistogramData<Time> => ({
+  time: toChartTime(pt.time),
+  value: pt.value,
+});
+
+const mapHistogramPoints = <T extends { time: number; value: number }>(pts: T[]): HistogramData<Time>[] =>
+  pts.map((p) => formatHistogramPoint(p));
 
 function toEtParts(msUtc: number): EtParts {
   const entries = etFormatter.formatToParts(msUtc).reduce<Record<string, string>>((acc, part) => {

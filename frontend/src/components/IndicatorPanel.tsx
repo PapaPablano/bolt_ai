@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
 import type { StPerfParams } from '@/utils/indicators-supertrend-perf';
+import {
+  DEFAULT_INDICATOR_STYLE_PREFS,
+  cloneIndicatorStylePrefs,
+  type HistThickness,
+  type IndicatorStyle,
+  type IndicatorStylePrefs,
+  type LineWidth,
+} from '@/types/indicator-styles';
 
 export type KdjPanelParams = {
   period: number;
@@ -25,6 +33,8 @@ type Props = {
   onSetMacdParams: (params: Partial<{ fast: number; slow: number; signal: number }>) => void;
   onSetVwapParams: (params: Partial<{ mult: number }>) => void;
   onSetKdjParams: (params: Partial<KdjPanelParams>) => void;
+  stylePrefs: IndicatorStylePrefs;
+  onChangeStyles: (next: IndicatorStylePrefs) => void;
 };
 
 export function IndicatorPanel({
@@ -36,6 +46,8 @@ export function IndicatorPanel({
   onSetMacdParams,
   onSetVwapParams,
   onSetKdjParams,
+  stylePrefs,
+  onChangeStyles,
 }: Props) {
   const [stParams, setStParams] = useState<StPerfParams>(initial.st);
   const [bbParams, setBbParams] = useState(initial.bb);
@@ -189,6 +201,8 @@ export function IndicatorPanel({
           <span className="text-slate-400">Anchor to RTH</span>
         </label>
       </div>
+
+      <StylesSection prefs={stylePrefs} onChange={onChangeStyles} />
     </div>
   );
 }
@@ -199,5 +213,109 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span>{label}</span>
       {children}
     </label>
+  );
+}
+
+type IndicatorOverrideKey = keyof NonNullable<IndicatorStylePrefs['perIndicator']>;
+
+function StylesSection({ prefs, onChange }: { prefs: IndicatorStylePrefs; onChange: (next: IndicatorStylePrefs) => void }) {
+  const lw = prefs.global.lineWidth ?? DEFAULT_INDICATOR_STYLE_PREFS.global.lineWidth;
+  const ht = prefs.global.histThickness ?? DEFAULT_INDICATOR_STYLE_PREFS.global.histThickness;
+
+  const emit = (next: IndicatorStylePrefs) => onChange(cloneIndicatorStylePrefs(next));
+
+  const setGlobal = (patch: Partial<IndicatorStylePrefs['global']>) => emit({ ...prefs, global: { ...prefs.global, ...patch } });
+
+  const setOverride = (key: IndicatorOverrideKey, patch: Partial<IndicatorStyle>) => {
+    const per = { ...(prefs.perIndicator ?? {}) } as NonNullable<IndicatorStylePrefs['perIndicator']>;
+    per[key] = { ...(per[key] ?? {}), ...patch };
+    emit({ ...prefs, perIndicator: per });
+  };
+
+  const applyToAll = () => {
+    const per: NonNullable<IndicatorStylePrefs['perIndicator']> = {};
+    const lineKeys: IndicatorOverrideKey[] = ['stAi', 'ema', 'rsi', 'vwap', 'bb', 'macdLine', 'macdSignal', 'kdjK', 'kdjD', 'kdjJ'];
+    const histKeys: IndicatorOverrideKey[] = ['macdHist', 'volume'];
+    lineKeys.forEach((key) => {
+      per[key] = { ...(per[key] ?? {}), lineWidth: lw };
+    });
+    histKeys.forEach((key) => {
+      per[key] = { ...(per[key] ?? {}), histThickness: ht };
+    });
+    emit({ ...prefs, perIndicator: per });
+  };
+
+  const resetOverrides = () => emit(cloneIndicatorStylePrefs(DEFAULT_INDICATOR_STYLE_PREFS));
+
+  const lineControls: { key: IndicatorOverrideKey; label: string }[] = [
+    { key: 'stAi', label: 'ST-AI line' },
+    { key: 'vwap', label: 'VWAP line' },
+    { key: 'macdLine', label: 'MACD line' },
+    { key: 'macdSignal', label: 'MACD signal' },
+    { key: 'kdjK', label: 'KDJ K' },
+    { key: 'kdjD', label: 'KDJ D' },
+    { key: 'kdjJ', label: 'KDJ J' },
+  ];
+
+  const histControls: { key: IndicatorOverrideKey; label: string }[] = [{ key: 'macdHist', label: 'MACD histogram' }];
+
+  return (
+    <section className="grid gap-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-medium">Styles</h4>
+        <div className="flex gap-2 text-xs">
+          <button type="button" className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700" onClick={applyToAll}>
+            Apply to all
+          </button>
+          <button type="button" className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700" onClick={resetOverrides}>
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 items-center">
+        <label className="text-xs text-slate-400">Global line width</label>
+        <input type="range" min={1} max={4} step={1} value={lw} onChange={(event) => setGlobal({ lineWidth: Number(event.target.value) as LineWidth })} />
+        <label className="text-xs text-slate-400">Global histogram thickness</label>
+        <select value={ht} onChange={(event) => setGlobal({ histThickness: event.target.value as HistThickness })}>
+          <option value="thin">Thin</option>
+          <option value="normal">Normal</option>
+          <option value="wide">Wide</option>
+        </select>
+      </div>
+
+      <div className="grid gap-2">
+        {lineControls.map(({ key, label }) => {
+          const value = prefs.perIndicator?.[key]?.lineWidth ?? lw;
+          return (
+            <div key={key} className="grid grid-cols-3 gap-2 items-center">
+              <span className="text-xs text-slate-400">{label}</span>
+              <input
+                type="range"
+                min={1}
+                max={4}
+                step={1}
+                value={value}
+                onChange={(event) => setOverride(key, { lineWidth: Number(event.target.value) as LineWidth })}
+              />
+              <span className="text-xs text-slate-500 text-right">{value}px</span>
+            </div>
+          );
+        })}
+        {histControls.map(({ key, label }) => {
+          const value = prefs.perIndicator?.[key]?.histThickness ?? ht;
+          return (
+            <div key={key} className="grid grid-cols-3 gap-2 items-center">
+              <span className="text-xs text-slate-400">{label}</span>
+              <select className="col-span-2" value={value} onChange={(event) => setOverride(key, { histThickness: event.target.value as HistThickness })}>
+                <option value="thin">Thin</option>
+                <option value="normal">Normal</option>
+                <option value="wide">Wide</option>
+              </select>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
