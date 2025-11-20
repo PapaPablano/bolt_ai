@@ -41,6 +41,8 @@ const CLOSE_OFFSET_MS = 16 * 60 * 60 * 1000;
 const SESSION_MS = CLOSE_OFFSET_MS - OPEN_OFFSET_MS;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKEND = new Set(['Sat', 'Sun']);
+const MACD_SPACING_MULT = { thin: 0.85, normal: 1, wide: 1.15 } as const;
+
 const etFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: NY_TZ,
   hour12: false,
@@ -82,6 +84,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const macdLineRef = useRef<ISeriesApi<'Line'> | null>(null);
   const macdSigRef = useRef<ISeriesApi<'Line'> | null>(null);
   const macdHistRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const macdSpacingRef = useRef<{ lastMult: number; lastApplied?: number }>({ lastMult: 1 });
 
   const lastTimeSecRef = useRef<number | null>(null);
   const lastBarRef = useRef<ChartBar | null>(null);
@@ -296,8 +299,13 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       const histThickness = styles.perIndicator?.macdHist?.histThickness ?? styles.global.histThickness ?? 'normal';
       if (macdChartRef.current) {
         const scale = macdChartRef.current.timeScale();
-        const SPACING_TARGETS: Record<'thin' | 'normal' | 'wide', number> = { thin: 5, normal: 7, wide: 9 };
-        scale.applyOptions({ barSpacing: SPACING_TARGETS[histThickness] });
+        const mult = MACD_SPACING_MULT[histThickness];
+        const currentSpacing = scale.options().barSpacing ?? 7;
+        const { lastApplied, lastMult } = macdSpacingRef.current;
+        const baseSpacing = lastApplied !== undefined && lastMult ? currentSpacing / (lastMult || 1) : currentSpacing;
+        const nextSpacing = Math.max(2, Math.min(20, baseSpacing * mult));
+        scale.applyOptions({ barSpacing: nextSpacing });
+        macdSpacingRef.current = { lastMult: mult, lastApplied: nextSpacing };
       }
     },
     [],
