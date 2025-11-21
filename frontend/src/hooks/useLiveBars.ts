@@ -8,8 +8,8 @@ import { assertBucketInvariant } from '@/utils/devInvariants';
 import { WsStream } from '@/lib/ws/stream';
 import type { TF as LiveTf, WsBarPayload } from '../../shared/ws-schema';
 
-type LiveOptions = { throttleMs?: number; pollMs?: number };
-const DEFAULTS: LiveOptions = { throttleMs: 250, pollMs: 1000 };
+type LiveOptions = { throttleMs?: number; pollMs?: number; enabled?: boolean };
+const DEFAULTS: Required<Omit<LiveOptions, 'enabled'>> = { throttleMs: 250, pollMs: 1000 };
 
 const toIso = (sec: number) => new Date(sec * 1000).toISOString();
 
@@ -36,23 +36,26 @@ const toBar = (payload: WsBarPayload): Bar => ({
   volume: payload.v,
 });
 
-export function useLiveBars(symbol: string, timeframe: TF, opts: LiveOptions = DEFAULTS) {
+export function useLiveBars(symbol: string, timeframe: TF, opts: LiveOptions = {}) {
   const [bar, setBar] = useState<Bar | null>(null);
   const throttleRef = useRef<number | null>(null);
 
   const emit = (b: Bar) => {
     if (throttleRef.current) window.clearTimeout(throttleRef.current);
-    throttleRef.current = window.setTimeout(() => setBar(b), opts.throttleMs ?? DEFAULTS.throttleMs!) as unknown as number;
+    const throttle = opts.throttleMs ?? DEFAULTS.throttleMs;
+    throttleRef.current = window.setTimeout(() => setBar(b), throttle) as unknown as number;
   };
 
   useEffect(() => {
     setBar(null);
+    if (opts.enabled === false) return;
 
     const startPolling = () => {
       let current: Bar | null = null;
       let lastBucketSec = -1;
       const quoteFn = env.quoteFunction || 'stock-quote';
 
+      const pollMs = opts.pollMs ?? DEFAULTS.pollMs;
       const id = window.setInterval(async () => {
         try {
           const { data, error } = await supabase.functions.invoke(quoteFn, { body: { symbol } });
@@ -80,7 +83,7 @@ export function useLiveBars(symbol: string, timeframe: TF, opts: LiveOptions = D
         } catch {
           // ignore poll errors
         }
-      }, opts.pollMs ?? DEFAULTS.pollMs!);
+      }, pollMs);
 
       return () => {
         window.clearInterval(id);
@@ -119,7 +122,7 @@ export function useLiveBars(symbol: string, timeframe: TF, opts: LiveOptions = D
     }
 
     return startPolling();
-  }, [symbol, timeframe, opts.pollMs, opts.throttleMs]);
+  }, [symbol, timeframe, opts.enabled, opts.pollMs, opts.throttleMs]);
 
   useEffect(() => {
     return () => {

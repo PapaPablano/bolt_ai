@@ -26,6 +26,7 @@ import { IntervalBar } from './IntervalBar';
 import { RangeBar } from './RangeBar';
 import { Button } from '@/components/ui/button';
 import PaneKDJ from './PaneKDJ';
+import { genMockBars } from '@/utils/mock';
 
 type Props = { symbol: string; initialTf?: TF; initialRange?: Range; height?: number };
 type ProbeState = { ok: boolean; error?: string; lastEvent?: string };
@@ -50,7 +51,41 @@ const qaProbeEnabled = import.meta.env.DEV || import.meta.env.VITE_QA_PROBE === 
 const SESSION_MS = CLOSE_OFFSET_MS - OPEN_OFFSET_MS;
 // MACD spacing is idempotent: targets stay stable regardless of zoom history.
 const MACD_SPACING_TARGETS: Record<'thin' | 'normal' | 'wide', number> = { thin: 5, normal: 7, wide: 9 };
+const MINUTES_PER_TRADING_DAY = 390;
+const rangeToMinutes = (value: Range | string): number => {
+  switch (value?.toUpperCase?.()) {
+    case '1D':
+      return MINUTES_PER_TRADING_DAY;
+    case '5D':
+      return 5 * MINUTES_PER_TRADING_DAY;
+    case '1M':
+      return 30 * MINUTES_PER_TRADING_DAY;
+    case '3M':
+      return 90 * MINUTES_PER_TRADING_DAY;
+    case '6M':
+      return 180 * MINUTES_PER_TRADING_DAY;
+    case '1Y':
+      return 252 * MINUTES_PER_TRADING_DAY;
+    case '2Y':
+      return 2 * 252 * MINUTES_PER_TRADING_DAY;
+    case '5Y':
+      return 5 * 252 * MINUTES_PER_TRADING_DAY;
+    case '10Y':
+    case 'MAX':
+      return 10 * 252 * MINUTES_PER_TRADING_DAY;
+    default:
+      return 900;
+  }
+};
 export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initialRange = '1Y', height = 520 }: Props) {
+  const [mockMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return new URL(window.location.href).searchParams.get('mock') === '1';
+    } catch {
+      return false;
+    }
+  });
   const { enabled: probeEnabled } = useProbeToggle();
   const { loading: prefsLoading, prefs, getTfPreset, setDefaultTf, setDefaultRange, updateTfPreset, setIndicatorStyles } = useChartPrefs();
   const tf: TF = prefs.default_timeframe ?? initialTf;
@@ -92,14 +127,44 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const lwcVersion = lwcInfo.version ?? lwcInfo.Version;
   const showProbe = import.meta.env.DEV && probeEnabled;
 
-  const { data: history, isLoading, error } = useHistoricalBars(symbol, tf, range);
-  const { bar: liveBar } = useLiveBars(symbol, tf);
+  if (qaProbeEnabled) {
+    try {
+      // eslint-disable-next-line no-console
+      console.info('[qa-probe] render', {
+        DEV: import.meta.env.DEV,
+        QA: import.meta.env.VITE_QA_PROBE === '1',
+        symbol,
+        mockMode,
+      });
+    } catch {
+      /* noop */
+    }
+  }
 
-  const isChartLoading = isLoading || prefsLoading;
+  const historyResult = useHistoricalBars(symbol, tf, range);
+  const liveResult = useLiveBars(symbol, tf, { enabled: !mockMode });
+  const mockHistory = useMemo(() => (mockMode ? genMockBars({ minutes: rangeToMinutes(range) }) : null), [mockMode, range]);
+  const historySource = useMemo<ApiBar[]>(() => {
+    if (mockHistory) {
+      return mockHistory.map((bar) => ({
+        time: new Date((bar.time as number) * 1000).toISOString(),
+        open: bar.open,
+        high: bar.high,
+        low: bar.low,
+        close: bar.close,
+        volume: 0,
+      }));
+    }
+    return historyResult.data ?? [];
+  }, [historyResult.data, mockHistory]);
+  const liveBar = mockMode ? null : liveResult.bar;
+
+  const isChartLoading = prefsLoading || (!mockMode && historyResult.isLoading);
   const auxPanelHeight = (preset.useMACD ? 180 : 0) + (preset.useRSI ? 140 : 0);
   const chartAreaHeight = Math.max(height - auxPanelHeight, 320);
   const lastVisibleRangeRef = useRef<{ from: number; to: number } | null>(null);
   const rangeThrottleRef = useRef<number | null>(null);
+  const chartError = mockMode ? null : historyResult.error;
 
   const normalizeWorkerSeries = (series: LinePt[]) =>
     series.filter((pt) => Number.isFinite(pt.value)).map((pt) => ({ time: pt.time, value: pt.value }));
@@ -850,10 +915,22 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         });
       },
     };
+    try {
+      // eslint-disable-next-line no-console
+      console.debug('[qa-probe] mounted', { symbol, namespaces: Object.keys((window as any).__probe ?? {}) });
+    } catch {
+      /* noop */
+    }
     return () => {
       if ((window as any).__probe) {
         delete (window as any).__probe[symbol];
         if (!Object.keys((window as any).__probe).length) delete (window as any).__probe;
+        try {
+          // eslint-disable-next-line no-console
+          console.debug('[qa-probe] unmounted', { symbol });
+        } catch {
+          /* noop */
+        }
       }
     };
   }, [getSeriesCount, qaProbeEnabled, setStylePrefs, symbol]);

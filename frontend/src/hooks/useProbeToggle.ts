@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react';
  * Dev-only toggle for showing chart diagnostics without code changes.
  */
 export function useProbeToggle(key = 'chart_probe') {
+  const probeBuild = import.meta.env.DEV || import.meta.env.VITE_QA_PROBE === '1';
+
   const [enabled, setEnabled] = useState<boolean>(() => {
-    if (!import.meta.env.DEV || typeof window === 'undefined') return false;
+    if (!probeBuild || typeof window === 'undefined') return false;
     try {
       const url = new URL(window.location.href);
       if (url.searchParams.get('probe') === '1') {
@@ -19,7 +21,7 @@ export function useProbeToggle(key = 'chart_probe') {
   });
 
   useEffect(() => {
-    if (!import.meta.env.DEV || typeof window === 'undefined') return;
+    if (!probeBuild || typeof window === 'undefined') return;
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
         setEnabled((v) => {
@@ -31,7 +33,7 @@ export function useProbeToggle(key = 'chart_probe') {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [key]);
+  }, [probeBuild, key]);
 
   return { enabled, setEnabled };
 }
