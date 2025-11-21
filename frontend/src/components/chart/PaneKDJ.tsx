@@ -18,6 +18,7 @@ const LINE_STYLES = {
 
 type LineWidths = { k?: 1 | 2 | 3 | 4; d?: 1 | 2 | 3 | 4; j?: 1 | 2 | 3 | 4 };
 
+// Line widths are controlled via props and clamped to 1–4 for chart compatibility.
 const clampWidth = (value?: number): 1 | 2 | 3 | 4 => {
   const n = Math.round(Number(value ?? 2));
   return Math.max(1, Math.min(4, n)) as 1 | 2 | 3 | 4;
@@ -108,3 +109,11 @@ export default function PaneKDJ({ height = 120, k, d, j, lineWidths }: Props) {
 
   return <div ref={containerRef} className="w-full" style={{ minHeight: height }} />;
 }
+
+/* @__TEST_ONLY__ */
+export const __test = {
+  clamp(w?: number): 1 | 2 | 3 | 4 {
+    const n = Math.round(Number(w ?? 2));
+    return Math.max(1, Math.min(4, n)) as 1 | 2 | 3 | 4;
+  },
+};

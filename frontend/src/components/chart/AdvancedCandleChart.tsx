@@ -13,6 +13,7 @@ import { useIndicatorWorker, type LinePt as WorkerLinePt } from '@/hooks/useIndi
 import { sma } from '@/utils/indicators';
 import { normalizeHistoricalBars, type Bar as ChartBar } from '@/utils/bars';
 import { alignNYSEBucketStartUtcSec, bucketSec, toSec } from '@/utils/nyseTime';
+import { resolveSessionOpenMs, OPEN_OFFSET_MS, CLOSE_OFFSET_MS, etMidnightUtc } from '@/utils/session';
 import { preprocessOhlcv } from '@/utils/preprocessOhlcv';
 import type { LinePt, StPerfParams } from '@/utils/indicators-supertrend-perf';
 import { assertBucketInvariant } from '@/utils/devInvariants';
@@ -31,31 +32,23 @@ type ProbeState = { ok: boolean; error?: string; lastEvent?: string };
 type WorkerIndicatorName = Exclude<PanelIndicatorName, 'KDJ'>;
 type ChartTimeRange = { from: Time | null; to: Time | null };
 
+export const mergePanePatch = (prev: WorkerLinePt[], patch?: WorkerLinePt[]): WorkerLinePt[] => {
+  if (!patch?.length) return prev;
+  const next = patch[patch.length - 1];
+  if (!next) return prev;
+  if (prev.length && prev[prev.length - 1].time === next.time) {
+    return [...prev.slice(0, -1), next];
+  }
+  return [...prev, next];
+};
+
 const envVars = import.meta.env as Record<string, string | undefined>;
 const tvFlag = (envVars.VITE_CHART_VENDOR ?? envVars.VITE_USE_TRADINGVIEW ?? '').toLowerCase();
 const USING_TV = tvFlag === 'tradingview' || tvFlag === 'true';
 
-const NY_TZ = 'America/New_York';
-const OPEN_OFFSET_MS = (9 * 60 + 30) * 60 * 1000;
-const CLOSE_OFFSET_MS = 16 * 60 * 60 * 1000;
 const SESSION_MS = CLOSE_OFFSET_MS - OPEN_OFFSET_MS;
-const DAY_MS = 24 * 60 * 60 * 1000;
-const WEEKEND = new Set(['Sat', 'Sun']);
-const MACD_SPACING_MULT = { thin: 0.85, normal: 1, wide: 1.15 } as const;
-
-const etFormatter = new Intl.DateTimeFormat('en-US', {
-  timeZone: NY_TZ,
-  hour12: false,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  weekday: 'short',
-});
-
-type EtParts = { year: number; month: number; day: number; hour: number; minute: number; second: number; weekday: string };
+// MACD spacing is idempotent: targets stay stable regardless of zoom history.
+const MACD_SPACING_TARGETS: Record<'thin' | 'normal' | 'wide', number> = { thin: 5, normal: 7, wide: 9 };
 export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initialRange = '1Y', height = 520 }: Props) {
   const { enabled: probeEnabled } = useProbeToggle();
   const { loading: prefsLoading, prefs, getTfPreset, setDefaultTf, setDefaultRange, updateTfPreset, setIndicatorStyles } = useChartPrefs();
@@ -84,7 +77,6 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const macdLineRef = useRef<ISeriesApi<'Line'> | null>(null);
   const macdSigRef = useRef<ISeriesApi<'Line'> | null>(null);
   const macdHistRef = useRef<ISeriesApi<'Histogram'> | null>(null);
-  const macdSpacingRef = useRef<{ lastMult: number; lastApplied?: number }>({ lastMult: 1 });
 
   const lastTimeSecRef = useRef<number | null>(null);
   const lastBarRef = useRef<ChartBar | null>(null);
@@ -159,16 +151,6 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const [kdjK, setKdjK] = useState<WorkerLinePt[]>([]);
   const [kdjD, setKdjD] = useState<WorkerLinePt[]>([]);
   const [kdjJ, setKdjJ] = useState<WorkerLinePt[]>([]);
-
-  const mergePanePatch = useCallback((prev: WorkerLinePt[], patch?: WorkerLinePt[]) => {
-    if (!patch?.length) return prev;
-    const next = patch[patch.length - 1];
-    if (!next) return prev;
-    if (prev.length && prev[prev.length - 1].time === next.time) {
-      return [...prev.slice(0, -1), next];
-    }
-    return [...prev, next];
-  }, []);
 
   const indicatorToggles = useMemo<Record<PanelIndicatorName, boolean>>(
     () => ({
@@ -261,7 +243,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     () => ({ st: stPanelDefaults, bb: bbPanelDefaults, macd: macdPanelDefaults, vwap: vwapPanelDefaults, kdj: kdjPanelDefaults }),
     [bbPanelDefaults, macdPanelDefaults, stPanelDefaults, vwapPanelDefaults, kdjPanelDefaults],
   );
-  const showKdjPane = indicatorToggles.KDJ && (kdjK.length || kdjD.length || kdjJ.length);
+  const showKdjPane = indicatorToggles.KDJ;
 
   const [stylePrefs, setStylePrefs] = useState<IndicatorStylePrefs>(() => cloneIndicatorStylePrefs(prefs.styles));
 
@@ -298,14 +280,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
 
       const histThickness = styles.perIndicator?.macdHist?.histThickness ?? styles.global.histThickness ?? 'normal';
       if (macdChartRef.current) {
-        const scale = macdChartRef.current.timeScale();
-        const mult = MACD_SPACING_MULT[histThickness];
-        const currentSpacing = scale.options().barSpacing ?? 7;
-        const { lastApplied, lastMult } = macdSpacingRef.current;
-        const baseSpacing = lastApplied !== undefined && lastMult ? currentSpacing / (lastMult || 1) : currentSpacing;
-        const nextSpacing = Math.max(2, Math.min(20, baseSpacing * mult));
-        scale.applyOptions({ barSpacing: nextSpacing });
-        macdSpacingRef.current = { lastMult: mult, lastApplied: nextSpacing };
+        macdChartRef.current.timeScale().applyOptions({ barSpacing: MACD_SPACING_TARGETS[histThickness] });
       }
     },
     [],
@@ -456,10 +431,6 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     (params: Partial<{ mult: number }>) => {
       indicatorWorker.setVwapParams(params);
       persistVwapParams(params);
-      if (params.mult !== undefined && overlays.current.vwap) {
-        const width = clampLineWidth(params.mult);
-        overlays.current.vwap?.applyOptions({ lineWidth: width });
-      }
     },
     [indicatorWorker, persistVwapParams],
   );
@@ -555,6 +526,8 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     macdSigRef.current = null;
     macdHistRef.current = null;
 
+    let zeroWidthObserver: ResizeObserver | null = null;
+
     try {
       const width = Math.max(container.clientWidth || 0, 800);
       const mainHeight = chartAreaHeight;
@@ -613,6 +586,21 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         macdHistRef.current = sch.addHistogramSeries({ priceLineVisible: false });
       }
 
+      if (container.clientWidth === 0 && typeof ResizeObserver !== 'undefined') {
+        zeroWidthObserver = new ResizeObserver((entries) => {
+          const w = entries[0]?.contentRect?.width ?? 0;
+          if (w > 0) {
+            chart.applyOptions({ width: w });
+            macdChartRef.current?.applyOptions({ width: w });
+            rsiChartRef.current?.applyOptions({ width: w });
+            applyVisibleDecimation(lastVisibleRangeRef.current);
+            zeroWidthObserver?.disconnect();
+            zeroWidthObserver = null;
+          }
+        });
+        zeroWidthObserver.observe(container);
+      }
+
       const onResize = () => {
         const w = Math.max(container.clientWidth || 0, 480);
         chart.applyOptions({ width: w });
@@ -623,6 +611,8 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       };
       window.addEventListener('resize', onResize);
       return () => {
+        zeroWidthObserver?.disconnect();
+        zeroWidthObserver = null;
         window.removeEventListener('resize', onResize);
         macdChartRef.current?.remove();
         rsiChartRef.current?.remove();
@@ -813,19 +803,54 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     if (shouldRedecimate) applyVisibleDecimation(lastVisibleRangeRef.current);
   }, [applyVisibleDecimation, indicatorWorker, liveBar, preset, tf]);
 
-  const getSeriesCount = () =>
-    (candleRef.current ? 1 : 0) +
-    (overlays.current.sma ? 1 : 0) +
-    (overlays.current.ema ? 1 : 0) +
-    (overlays.current.bbu ? 1 : 0) +
-    (overlays.current.bbm ? 1 : 0) +
-    (overlays.current.bbl ? 1 : 0) +
-    (overlays.current.stai ? 1 : 0) +
-    (overlays.current.vwap ? 1 : 0) +
-    (rsiSeriesRef.current ? 1 : 0) +
-    (macdLineRef.current ? 1 : 0) +
-    (macdSigRef.current ? 1 : 0) +
-    (macdHistRef.current ? 1 : 0);
+  const getSeriesCount = useCallback(
+    () =>
+      (candleRef.current ? 1 : 0) +
+      (overlays.current.sma ? 1 : 0) +
+      (overlays.current.ema ? 1 : 0) +
+      (overlays.current.bbu ? 1 : 0) +
+      (overlays.current.bbm ? 1 : 0) +
+      (overlays.current.bbl ? 1 : 0) +
+      (overlays.current.stai ? 1 : 0) +
+      (overlays.current.vwap ? 1 : 0) +
+      (rsiSeriesRef.current ? 1 : 0) +
+      (macdLineRef.current ? 1 : 0) +
+      (macdSigRef.current ? 1 : 0) +
+      (macdHistRef.current ? 1 : 0),
+    [],
+  );
+
+  // DEV-only probe (namespaced by symbol)
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const win = window as any;
+    const root = (win.__probe = win.__probe ?? {});
+    root[symbol] = {
+      get macdBarSpacing() {
+        return macdChartRef.current?.timeScale().options().barSpacing ?? null;
+      },
+      get seriesCount() {
+        return getSeriesCount();
+      },
+      setMacdThickness: (thickness: 'thin' | 'normal' | 'wide') => {
+        setStylePrefs((prev) => {
+          const next = cloneIndicatorStylePrefs(prev);
+          next.perIndicator = next.perIndicator ?? {};
+          next.perIndicator.macdHist = {
+            ...(next.perIndicator.macdHist ?? {}),
+            histThickness: thickness,
+          };
+          return next;
+        });
+      },
+    };
+    return () => {
+      if (win.__probe) {
+        delete win.__probe[symbol];
+        if (!Object.keys(win.__probe).length) delete win.__probe;
+      }
+    };
+  }, [getSeriesCount, setStylePrefs, symbol]);
 
   return (
     <div className="space-y-3">
@@ -836,7 +861,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         </div>
         <div className="flex gap-2">
           <IndicatorMenu timeframe={tf} />
-          <Button variant="secondary" onClick={() => chartRef.current?.timeScale().fitContent()}>
+          <Button data-testid="reset-view" variant="secondary" onClick={() => chartRef.current?.timeScale().fitContent()}>
             Reset view
           </Button>
         </div>
@@ -864,9 +889,13 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
           <div className="absolute inset-0 grid place-items-center text-red-400 bg-slate-900/60">Failed to load data.</div>
         )}
       </div>
-      {preset.useRSI && <div ref={rsiRef} className="w-full" style={{ minHeight: 140 }} />}
-      {preset.useMACD && <div ref={macdRef} className="w-full" style={{ minHeight: 180 }} />}
-      {showKdjPane && <PaneKDJ k={kdjK} d={kdjD} j={kdjJ} lineWidths={kdjLineWidths} />}
+      {preset.useRSI && <div data-testid="pane-rsi" ref={rsiRef} className="w-full" style={{ minHeight: 140 }} />}
+      {preset.useMACD && <div data-testid="pane-macd" ref={macdRef} className="w-full" style={{ minHeight: 180 }} />}
+      {showKdjPane && (
+        <div data-testid="pane-kdj">
+          <PaneKDJ k={kdjK} d={kdjD} j={kdjJ} lineWidths={kdjLineWidths} />
+        </div>
+      )}
 
       {showProbe && (
         <ChartProbe
@@ -994,59 +1023,9 @@ const formatHistogramPoint = <T extends { time: number; value: number }>(pt: T):
 const mapHistogramPoints = <T extends { time: number; value: number }>(pts: T[]): HistogramData<Time>[] =>
   pts.map((p) => formatHistogramPoint(p));
 
-function toEtParts(msUtc: number): EtParts {
-  const entries = etFormatter.formatToParts(msUtc).reduce<Record<string, string>>((acc, part) => {
-    if (part.type !== 'literal') acc[part.type] = part.value;
-    return acc;
-  }, {});
-  return {
-    year: Number(entries.year ?? 1970),
-    month: Number(entries.month ?? 1),
-    day: Number(entries.day ?? 1),
-    hour: Number(entries.hour ?? 0),
-    minute: Number(entries.minute ?? 0),
-    second: Number(entries.second ?? 0),
-    weekday: String(entries.weekday ?? 'Mon'),
-  };
-}
-
-function etMidnightUtc(msUtc: number) {
-  const parts = toEtParts(msUtc);
-  const approx = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
-  const offset = msUtc - approx;
-  return Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0) + offset;
-}
-
-function shiftMidnight(midnightMs: number, direction: -1 | 1) {
-  let cursor = midnightMs;
-  for (let i = 0; i < 7; i++) {
-    cursor += direction * DAY_MS;
-    const weekday = toEtParts(cursor).weekday;
-    if (!WEEKEND.has(weekday)) return cursor;
-  }
-  return midnightMs;
-}
-
-function resolveSessionOpenMs(msUtc: number): number {
-  const midnight = etMidnightUtc(msUtc);
-  const weekday = toEtParts(msUtc).weekday;
-  if (WEEKEND.has(weekday)) {
-    const prev = shiftMidnight(midnight, -1);
-    return prev + OPEN_OFFSET_MS;
-  }
-  const open = midnight + OPEN_OFFSET_MS;
-  const close = midnight + CLOSE_OFFSET_MS;
-  if (msUtc < open) {
-    const prev = shiftMidnight(midnight, -1);
-    return prev + OPEN_OFFSET_MS;
-  }
-  if (msUtc >= close) {
-    const next = shiftMidnight(midnight, 1);
-    return next + OPEN_OFFSET_MS;
-  }
-  return open;
-}
-
 function getAnchoredOriginMs(tf: TF, referenceMs: number) {
   return tf === '1Day' ? etMidnightUtc(referenceMs) : resolveSessionOpenMs(referenceMs);
 }
+
+/* @__TEST_ONLY__ */
+export const __test = { fromChartTimeValue, mergePanePatch };

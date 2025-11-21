@@ -7,6 +7,14 @@ import { DEFAULT_INDICATOR_STYLE_PREFS, cloneIndicatorStylePrefs, type Indicator
 const LS_KEY = 'chart_prefs_v2';
 const LEGACY_KEYS = ['chart_prefs_v1'];
 
+const ensureStyles = (styles?: IndicatorStylePrefs): IndicatorStylePrefs => ({
+  global: {
+    lineWidth: styles?.global?.lineWidth ?? 2,
+    histThickness: styles?.global?.histThickness ?? 'normal',
+  },
+  perIndicator: styles?.perIndicator ?? {},
+});
+
 const mergeDefaults = (p?: Partial<ChartPrefs>): ChartPrefs => {
   const presets = (Object.keys(DEFAULT_PRESETS) as TF[]).reduce<Record<TF, TfPreset>>((acc, tf) => {
     acc[tf] = { ...DEFAULT_PRESETS[tf], ...(p?.presets?.[tf] ?? {}) };
@@ -17,7 +25,7 @@ const mergeDefaults = (p?: Partial<ChartPrefs>): ChartPrefs => {
     default_timeframe: (p?.default_timeframe ?? DEFAULT_TF) as TF,
     default_range: (p?.default_range ?? DEFAULT_RANGE) as Range,
     presets,
-    styles: cloneIndicatorStylePrefs(p?.styles ?? DEFAULT_INDICATOR_STYLE_PREFS),
+    styles: cloneIndicatorStylePrefs(ensureStyles(p?.styles ?? DEFAULT_INDICATOR_STYLE_PREFS)),
   };
 };
 
@@ -115,7 +123,11 @@ export function useChartPrefs() {
   }, [prefs, authed, userId]);
 
   const getTfPreset = useMemo(
-    () => (tf: TF): TfPreset => prefs.presets[tf],
+    () =>
+      (tf: TF): TfPreset => {
+        const preset = prefs.presets[tf];
+        return { ...preset, useKDJ: preset.useKDJ ?? false };
+      },
     [prefs.presets],
   );
   const updateTfPreset = (tf: TF, patch: Partial<TfPreset>) =>
@@ -123,7 +135,7 @@ export function useChartPrefs() {
   const setDefaultTf = (tf: TF) => setPrefs((p) => ({ ...p, default_timeframe: tf }));
   const setDefaultRange = (range: Range) => setPrefs((p) => ({ ...p, default_range: range }));
   const setIndicatorStyles = (styles: IndicatorStylePrefs) =>
-    setPrefs((p) => ({ ...p, styles: cloneIndicatorStylePrefs(styles) }));
+    setPrefs((p) => ({ ...p, styles: cloneIndicatorStylePrefs(ensureStyles(styles)) }));
 
   return { loading, prefs, getTfPreset, updateTfPreset, setDefaultTf, setDefaultRange, setIndicatorStyles };
 }
