@@ -20,6 +20,8 @@ import { assertBucketInvariant } from '@/utils/devInvariants';
 import { downsampleOhlcVisible } from '@/utils/ohlc-decimator';
 import { IndicatorPanel, type KdjPanelParams } from '@/components/IndicatorPanel';
 import type { PanelIndicatorName } from '@/types/indicators';
+import { fetchCalendar, type EconEvent } from '@/api/calendar';
+import { applyEventMarkers } from '@/components/chart/EconEventsOverlay';
 import { ChartProbe } from './ChartProbe';
 import { IndicatorMenu } from './IndicatorMenu';
 import { IntervalBar } from './IntervalBar';
@@ -123,8 +125,11 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const lastTimeSecRef = useRef<number | null>(null);
   const lastBarRef = useRef<ChartBar | null>(null);
   const seedBarsRef = useRef<ChartBar[]>([]);
+  const econEventsRef = useRef<EconEvent[] | null>(null);
 
   const [probeState, setProbeState] = useState<ProbeState>({ ok: false, lastEvent: 'idle' });
+  const [econEventsLen, setEconEventsLen] = useState(0);
+  const [seedBarsVersion, setSeedBarsVersion] = useState(0);
   const logProbeEvent = (msg: string) => {
     if (import.meta.env.DEV) console.debug('[chart]', msg);
     setProbeState((prev) => ({ ...prev, lastEvent: msg }));
@@ -235,8 +240,18 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       BB: !!preset.useBB,
       MACD: !!preset.useMACD,
       KDJ: !!preset.useKDJ,
+      Calendar: !!preset.useCalendar,
     }),
-    [preset.useSTPerf, preset.useEMA, preset.useRSI, preset.useVWAP, preset.useBB, preset.useMACD, preset.useKDJ],
+    [
+      preset.useSTPerf,
+      preset.useEMA,
+      preset.useRSI,
+      preset.useVWAP,
+      preset.useBB,
+      preset.useMACD,
+      preset.useKDJ,
+      preset.useCalendar,
+    ],
   );
 
   const indicatorWorker = useIndicatorWorker(symbol, tf, {
@@ -457,6 +472,10 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
 
   const handleIndicatorToggle = useCallback(
     (name: PanelIndicatorName, on: boolean) => {
+      if (name === 'Calendar') {
+        updateTfPreset(tf, { useCalendar: on });
+        return;
+      }
       if (name === 'KDJ') {
         indicatorWorker.toggleKdj(on);
         if (!on) clearIndicatorSeries('KDJ');
@@ -754,6 +773,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     });
     const normalized = normalizeHistoricalBars(cleaned.map(toChartBar), tf);
     seedBarsRef.current = normalized;
+    setSeedBarsVersion((prev) => prev + 1);
 
     const entireRange =
       normalized.length > 0 ? { from: normalized[0].time, to: normalized[normalized.length - 1].time } : null;
@@ -794,7 +814,79 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     macdSigRef.current?.setData([]);
     macdHistRef.current?.setData([]);
     indicatorWorker.setHistory([]);
+    econEventsRef.current = null;
+    setEconEventsLen(0);
+    candleRef.current?.setMarkers([]);
+    setSeedBarsVersion((prev) => prev + 1);
   }, [indicatorWorker, range, symbol, tf]);
+
+  useEffect(() => {
+    const series = candleRef.current;
+    const bars = seedBarsRef.current;
+    if (!series) return;
+    if (!bars.length) {
+      econEventsRef.current = null;
+      setEconEventsLen(0);
+      try {
+        series.setMarkers([]);
+      } catch {
+        /* noop */
+      }
+      return;
+    }
+
+    const calendarOn = !!preset.useCalendar;
+    if (!calendarOn) {
+      econEventsRef.current = null;
+      setEconEventsLen(0);
+      try {
+        series.setMarkers([]);
+      } catch {
+        /* noop */
+      }
+      return;
+    }
+
+    let cancelled = false;
+    const start = bars[0].time;
+    const end = bars[bars.length - 1].time;
+
+    (async () => {
+      try {
+        const events = await fetchCalendar({
+          start,
+          end,
+          countries: ['US', 'EU', 'GB'],
+          minImpact: 'medium',
+        });
+        if (cancelled) return;
+        econEventsRef.current = events;
+        setEconEventsLen(events.length);
+        applyEventMarkers(series, events, bars);
+      } catch (err) {
+        if (import.meta.env.DEV) console.warn('[calendar] fetch failed', err);
+        econEventsRef.current = null;
+        setEconEventsLen(0);
+        try {
+          series.setMarkers([]);
+        } catch {
+          /* noop */
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [preset.useCalendar, seedBarsVersion, symbol, tf]);
+
+  useEffect(() => {
+    const series = candleRef.current;
+    const bars = seedBarsRef.current;
+    const events = econEventsRef.current;
+    if (!series || !events?.length || !bars.length) return;
+    applyEventMarkers(series, events, bars);
+  }, [seedBarsVersion, econEventsLen]);
 
   useEffect(() => {
     if (mockMode) return;
@@ -922,6 +1014,9 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
           next.perIndicator.macdHist = { ...(next.perIndicator.macdHist ?? {}), histThickness: thickness };
           return next;
         });
+      },
+      get econEventCount() {
+        return econEventsRef.current?.length ?? 0;
       },
     };
     try {

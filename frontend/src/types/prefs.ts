@@ -41,6 +41,7 @@ export type TfPreset = {
   kdjKSmooth?: number;
   kdjDSmooth?: number;
   kdjSessionAnchored?: boolean;
+  useCalendar?: boolean;
 };
 
 export type ChartPrefs = {
@@ -96,6 +97,7 @@ export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
     kdjKSmooth: 3,
     kdjDSmooth: 3,
     kdjSessionAnchored: true,
+    useCalendar: false,
   },
   '5Min': {
     useSMA: false,
@@ -134,6 +136,7 @@ export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
     kdjKSmooth: 3,
     kdjDSmooth: 3,
     kdjSessionAnchored: true,
+    useCalendar: false,
   },
   '10Min': {
     useSMA: false,
@@ -172,6 +175,7 @@ export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
     kdjKSmooth: 3,
     kdjDSmooth: 3,
     kdjSessionAnchored: true,
+    useCalendar: false,
   },
   '15Min': {
     useSMA: false,
@@ -210,6 +214,7 @@ export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
     kdjKSmooth: 3,
     kdjDSmooth: 3,
     kdjSessionAnchored: true,
+    useCalendar: false,
   },
   '1Hour': {
     useSMA: true,
@@ -248,6 +253,7 @@ export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
     kdjKSmooth: 3,
     kdjDSmooth: 3,
     kdjSessionAnchored: true,
+    useCalendar: false,
   },
   '4Hour': {
     useSMA: true,
@@ -286,6 +292,7 @@ export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
     kdjKSmooth: 3,
     kdjDSmooth: 3,
     kdjSessionAnchored: true,
+    useCalendar: false,
   },
   '1Day': {
     useSMA: true,
@@ -324,5 +331,6 @@ export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
     kdjKSmooth: 3,
     kdjDSmooth: 3,
     kdjSessionAnchored: true,
+    useCalendar: false,
   },
 };

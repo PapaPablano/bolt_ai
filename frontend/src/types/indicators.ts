@@ -1,1 +1,9 @@
-export type PanelIndicatorName = 'STAI' | 'EMA' | 'RSI' | 'VWAP' | 'BB' | 'MACD' | 'KDJ';
+export type PanelIndicatorName =
+  | 'STAI'
+  | 'EMA'
+  | 'RSI'
+  | 'VWAP'
+  | 'BB'
+  | 'MACD'
+  | 'KDJ'
+  | 'Calendar';

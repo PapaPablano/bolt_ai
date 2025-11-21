@@ -8,6 +8,7 @@ import {
   type IndicatorStylePrefs,
   type LineWidth,
 } from '@/types/indicator-styles';
+import { Switch } from '@/components/ui/switch';
 
 export type KdjPanelParams = {
   period: number;
@@ -16,7 +17,7 @@ export type KdjPanelParams = {
   sessionAnchored: boolean;
 };
 
-type IndToggle = 'STAI' | 'EMA' | 'RSI' | 'VWAP' | 'BB' | 'MACD' | 'KDJ';
+type IndToggle = 'STAI' | 'EMA' | 'RSI' | 'VWAP' | 'BB' | 'MACD' | 'KDJ' | 'Calendar';
 
 type Props = {
   initial: {
@@ -205,6 +206,15 @@ export function IndicatorPanel({
           <input type="checkbox" checked={kdjParams.sessionAnchored} onChange={(event) => updateKdj({ sessionAnchored: event.target.checked })} />
           <span className="text-slate-400">Anchor to RTH</span>
         </label>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <span className="text-sm">Economic Calendar</span>
+        <Switch
+          data-testid="toggle-calendar"
+          checked={!!toggles.Calendar}
+          onCheckedChange={(checked) => onToggle('Calendar', checked)}
+        />
       </div>
 
       <StylesSection prefs={stylePrefs} onChange={onChangeStyles} />

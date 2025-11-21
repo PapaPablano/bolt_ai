@@ -13,30 +13,44 @@ from zoneinfo import ZoneInfo
 from .api_ohlc import router as ohlc_router
 from .config import OHLC_DB_URL  # noqa: F401 (import ensures env validation)
 from .providers.alpaca_ws import AlpacaBarsClient
+from .routers import calendar as calendar_router
 
 NY = ZoneInfo("America/New_York")
 
 TF_STEP_SEC = {
-    "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400
+    "1m": 60,
+    "5m": 300,
+    "15m": 900,
+    "1h": 3600,
+    "4h": 14400,
+    "1d": 86400,
 }
 
+
 def nyse_open_close(dt_utc: datetime) -> Tuple[datetime, datetime]:
-    # Returns today's regular session in UTC for a given utc time
+    """Return current NYSE regular session (UTC) for given UTC timestamp."""
     et = dt_utc.astimezone(NY)
     d = et.date()
     open_et = datetime(d.year, d.month, d.day, 9, 30, tzinfo=NY)
     close_et = datetime(d.year, d.month, d.day, 16, 0, tzinfo=NY)
     return open_et.astimezone(timezone.utc), close_et.astimezone(timezone.utc)
 
+
 def align_bucket_start(ts_utc: datetime, tf: str) -> datetime:
-    # Align to NYSE session anchor (09:30 ET) for intraday; 1d to ET midnight
+    """Align to NYSE anchor (intraday) or ET midnight for daily bars."""
     step = TF_STEP_SEC[tf]
     if tf == "1d":
-        et_midnight = ts_utc.astimezone(NY).replace(hour=0, minute=0, second=0, microsecond=0)
+        et_midnight = ts_utc.astimezone(NY).replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
         epoch = et_midnight.astimezone(timezone.utc)
     else:
         open_utc, _ = nyse_open_close(ts_utc)
-        # number of seconds since today's open (if before open, use previous business day open)
+        # number of seconds since today's open.
+        # if before open, use previous business day open
         if ts_utc < open_utc:
             prev = ts_utc - timedelta(days=1)
             open_utc, _ = nyse_open_close(prev)
@@ -46,10 +60,13 @@ def align_bucket_start(ts_utc: datetime, tf: str) -> datetime:
     return epoch
 
 # --- Subscription manager ---
+
+
 class Hub:
     def __init__(self):
         self.clients: Dict[WebSocket, str] = {}
-        self.subs: Dict[Tuple[str, str], Set[WebSocket]] = {}  # (symbol, tf) -> sockets
+        # (symbol, timeframe) -> sockets
+        self.subs: Dict[Tuple[str, str], Set[WebSocket]] = {}
         self.session_id = str(uuid.uuid4())
 
     async def connect(self, ws: WebSocket):
@@ -69,7 +86,7 @@ class Hub:
         self.subs.setdefault(key, set()).add(ws)
 
     def unsubscribe(self, ws: WebSocket, _id: str):
-        # client holds its id; here we keep it simple and remove ws from all sets
+        # client holds its id; remove ws from all sets for simplicity
         for key in list(self.subs.keys()):
             self.subs[key].discard(ws)
             if not self.subs[key]:
@@ -77,7 +94,7 @@ class Hub:
 
     async def publish_tick(self, symbol: str, tf: str, tick: dict):
         # tick = { "ts": epoch_ms, "o","h","l","c","v" } (raw or partial)
-        ts = datetime.fromtimestamp(tick["ts"]/1000, tz=timezone.utc)
+        ts = datetime.fromtimestamp(tick["ts"] / 1000, tz=timezone.utc)
         tstart = align_bucket_start(ts, tf)
         # we consider barClose when tick ts exceeds bucket start + step
         step = TF_STEP_SEC[tf]
@@ -104,7 +121,10 @@ class Hub:
             except WebSocketDisconnect:
                 self.disconnect(ws)
 
+
 hub = Hub()
+
+
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -114,6 +134,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(ohlc_router)
+app.include_router(calendar_router.router)
+
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
@@ -131,19 +153,33 @@ async def ws_endpoint(ws: WebSocket):
         hub.disconnect(ws)
 
 # --- Demo publisher (replace with your market stream) ---
+
+
 async def demo_feed():
     import random
     symbol, tf = "AAPL", "1m"
     c = 270.0
     while True:
-        now_ms = int(datetime.now(tz=timezone.utc).timestamp()*1000)
+        now_ms = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
         o = c
         h = c + random.uniform(0, 0.4)
-        l = c - random.uniform(0, 0.4)
-        c = l + (h-l)*random.random()
+        low = c - random.uniform(0, 0.4)
+        c = low + (h - low) * random.random()
         v = random.randint(100, 5000)
-        await hub.publish_tick(symbol, tf, {"ts": now_ms, "o": o, "h": h, "l": l, "c": c, "v": v})
+        await hub.publish_tick(
+            symbol,
+            tf,
+            {
+                "ts": now_ms,
+                "o": o,
+                "h": h,
+                "l": low,
+                "c": c,
+                "v": v,
+            },
+        )
         await asyncio.sleep(1.0)
+
 
 @app.on_event("startup")
 async def start_demo():
@@ -157,6 +193,7 @@ async def start_demo():
         timeframe = os.getenv("LIVE_TF", "1m")
         client = AlpacaBarsClient(hub, symbols, timeframe=timeframe)
         asyncio.create_task(client.run())
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
