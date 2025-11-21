@@ -53,40 +53,59 @@ export function etMidnightUtc(msUtc: number) {
 export type TradingCalendar = {
   isTradingDay(msUtcMidnight: number): boolean;
   nextTradingMidnight(msUtcMidnight: number, dir: -1 | 1): number;
+  /** True if the full day is closed (e.g., NYSE holiday). */
+  isFullHoliday?(msUtcMidnight: number): boolean;
+  /** True if the session closes early (half-day). */
+  isHalfDay?(msUtcMidnight: number): boolean;
+  /** Overrideable session timing offsets. */
+  openOffsetMs?: number;
+  closeOffsetMs?: number;
+  halfDayCloseOffsetMs?: number;
 };
 
 export function makeSessionResolver(calendar?: TradingCalendar) {
-  const isWeekend = (weekday: string) => weekday === 'Sat' || weekday === 'Sun';
+  const openOffset = () => calendar?.openOffsetMs ?? OPEN_OFFSET_MS;
+  const closeOffsetFor = (midnightMs: number) => {
+    const isHalf = calendar?.isHalfDay?.(midnightMs) === true;
+    if (isHalf) return calendar?.halfDayCloseOffsetMs ?? 13 * 60 * 60 * 1000; // 13:00 ET default
+    return calendar?.closeOffsetMs ?? CLOSE_OFFSET_MS;
+  };
+
+  const isFullClosure = (midnightMs: number) => {
+    const weekday = toEtParts(midnightMs).weekday;
+    if (WEEKEND.has(weekday)) return true;
+    return calendar?.isFullHoliday?.(midnightMs) === true;
+  };
 
   const shiftMidnight = (midnightMs: number, direction: -1 | 1) => {
-    if (!calendar) {
-      let cursor = midnightMs;
-      for (let i = 0; i < 7; i++) {
-        cursor += direction * DAY_MS;
-        const weekday = toEtParts(cursor).weekday;
-        if (!isWeekend(weekday)) return cursor;
-      }
-      return midnightMs;
+    let cursor = midnightMs;
+    const limit = 32; // plenty to skip multi-day closures
+    for (let i = 0; i < limit; i++) {
+      const next = calendar
+        ? calendar.nextTradingMidnight(cursor, direction)
+        : etMidnightUtc(cursor + direction * DAY_MS);
+      const progressed = next !== cursor;
+      cursor = progressed ? next : etMidnightUtc(cursor + direction * DAY_MS);
+      if (!isFullClosure(cursor)) return cursor;
     }
-    return calendar.nextTradingMidnight(midnightMs, direction);
+    return cursor;
   };
 
   return function resolveSessionOpenMs(msUtc: number): number {
     const midnight = etMidnightUtc(msUtc);
-    const weekday = toEtParts(msUtc).weekday;
-    const isTradingDay = calendar ? calendar.isTradingDay(midnight) : !isWeekend(weekday);
+    const closedToday = isFullClosure(midnight);
 
-    if (!isTradingDay) {
+    if (closedToday) {
       const next = shiftMidnight(midnight, 1);
-      return next + OPEN_OFFSET_MS;
+      return next + openOffset();
     }
 
-    const open = midnight + OPEN_OFFSET_MS;
-    const close = midnight + CLOSE_OFFSET_MS;
+    const open = midnight + openOffset();
+    const close = midnight + closeOffsetFor(midnight);
     if (msUtc < open) return open;
     if (msUtc >= close) {
       const next = shiftMidnight(midnight, 1);
-      return next + OPEN_OFFSET_MS;
+      return next + openOffset();
     }
     return open;
   };

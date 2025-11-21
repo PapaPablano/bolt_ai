@@ -6,9 +6,15 @@ const LABEL: Record<TF, string> = { '1Min': '1m', '5Min': '5m', '10Min': '10m', 
 
 export function IntervalBar({ value, onChange }: { value: TF; onChange: (v: TF) => void }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2" data-testid="interval-bar">
       {TF_OPTS.map((tf) => (
-        <Button key={tf} variant={tf === value ? 'default' : 'secondary'} size="sm" onClick={() => onChange(tf)}>
+        <Button
+          key={tf}
+          data-testid={`tf-${tf}`}
+          variant={tf === value ? 'default' : 'secondary'}
+          size="sm"
+          onClick={() => onChange(tf)}
+        >
           {LABEL[tf]}
         </Button>
       ))}

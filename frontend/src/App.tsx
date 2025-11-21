@@ -32,8 +32,21 @@ import { PlaceholderPage } from './pages/PlaceholderPage';
 import { ROUTES } from './lib/urlHelpers';
 import { generateStructuredData } from './lib/seo';
 
+const DEFAULT_SYMBOL = 'AAPL';
+
+const readInitialSymbol = () => {
+  if (typeof window === 'undefined') return DEFAULT_SYMBOL;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const paramSymbol = params.get('symbol');
+    return (paramSymbol ?? DEFAULT_SYMBOL).toUpperCase();
+  } catch {
+    return DEFAULT_SYMBOL;
+  }
+};
+
 function App() {
-  const [selectedSymbol, setSelectedSymbol] = useState('AAPL');
+  const [selectedSymbol, setSelectedSymbol] = useState<string>(() => readInitialSymbol());
   const navigate = useNavigate();
   const location = useLocation();
 

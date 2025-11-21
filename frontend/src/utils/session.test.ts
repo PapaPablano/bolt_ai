@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resolveSessionOpenMs, makeSessionResolver, type TradingCalendar } from './session';
+import { toEtParts, DAY_MS } from './session';
 
 const msUtc = (y: number, m: number, d: number, h: number, mi: number, s: number) => Date.UTC(y, m - 1, d, h, mi, s);
 
@@ -26,16 +27,27 @@ describe('resolveSessionOpenMs – DST edges', () => {
 });
 
 describe('resolveSessionOpenMs – holiday handling with stub calendar', () => {
-  const HOLIDAY = Date.UTC(2024, 0, 1);
+  const weekdayOf = (midnight: number) => toEtParts(midnight).weekday;
+  const isWeekend = (midnight: number) => {
+    const weekday = weekdayOf(midnight);
+    return weekday === 'Sat' || weekday === 'Sun';
+  };
+  const isHoliday = (midnight: number) => {
+    const parts = toEtParts(midnight);
+    return parts.year === 2024 && parts.month === 1 && parts.day === 1;
+  };
+
   const cal: TradingCalendar = {
-    isTradingDay: (midnight) => midnight !== HOLIDAY,
+    isTradingDay: (midnight) => !isWeekend(midnight) && !isHoliday(midnight),
     nextTradingMidnight: (midnight, dir) => {
       let cursor = midnight;
-      do {
-        cursor += dir * 24 * 60 * 60 * 1000;
-      } while (cursor === HOLIDAY);
+      for (let i = 0; i < 10; i++) {
+        cursor += dir * DAY_MS;
+        if (!isWeekend(cursor) && !isHoliday(cursor)) return cursor;
+      }
       return cursor;
     },
+    isFullHoliday: (midnight) => isHoliday(midnight),
   };
 
   it('skips a holiday Monday and anchors to Tuesday 09:30 ET', () => {

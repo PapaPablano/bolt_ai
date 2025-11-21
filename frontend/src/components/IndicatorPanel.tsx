@@ -89,7 +89,12 @@ export function IndicatorPanel({
 
   const checkbox = (name: IndToggle, label: string) => (
     <label className="flex items-center gap-2">
-      <input type="checkbox" checked={!!toggles[name]} onChange={(event) => onToggle(name, event.target.checked)} />
+      <input
+        data-testid={`toggle-${name.toLowerCase()}`}
+        type="checkbox"
+        checked={!!toggles[name]}
+        onChange={(event) => onToggle(name, event.target.checked)}
+      />
       {label}
     </label>
   );

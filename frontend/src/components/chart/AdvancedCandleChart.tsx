@@ -45,6 +45,7 @@ export const mergePanePatch = (prev: WorkerLinePt[], patch?: WorkerLinePt[]): Wo
 const envVars = import.meta.env as Record<string, string | undefined>;
 const tvFlag = (envVars.VITE_CHART_VENDOR ?? envVars.VITE_USE_TRADINGVIEW ?? '').toLowerCase();
 const USING_TV = tvFlag === 'tradingview' || tvFlag === 'true';
+const qaProbeEnabled = import.meta.env.DEV || import.meta.env.VITE_QA_PROBE === '1';
 
 const SESSION_MS = CLOSE_OFFSET_MS - OPEN_OFFSET_MS;
 // MACD spacing is idempotent: targets stay stable regardless of zoom history.
@@ -820,11 +821,10 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     [],
   );
 
-  // DEV-only probe (namespaced by symbol)
+  // QA probe (namespaced by symbol) available in dev and flagged preview builds
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    const win = window as any;
-    const root = (win.__probe = win.__probe ?? {});
+    if (!qaProbeEnabled) return;
+    const root = (window as any).__probe ?? ((window as any).__probe = {});
     root[symbol] = {
       get macdBarSpacing() {
         return macdChartRef.current?.timeScale().options().barSpacing ?? null;
@@ -832,25 +832,31 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       get seriesCount() {
         return getSeriesCount();
       },
+      get visibleLogicalRange() {
+        const range = chartRef.current?.timeScale().getVisibleLogicalRange();
+        return range ? { from: range.from, to: range.to } : null;
+      },
+      get dataLogicalRange() {
+        const base = chartRef.current?.timeScale();
+        if (!base || !seedBarsRef.current.length) return null;
+        return { from: 0, to: seedBarsRef.current.length - 1 };
+      },
       setMacdThickness: (thickness: 'thin' | 'normal' | 'wide') => {
         setStylePrefs((prev) => {
           const next = cloneIndicatorStylePrefs(prev);
           next.perIndicator = next.perIndicator ?? {};
-          next.perIndicator.macdHist = {
-            ...(next.perIndicator.macdHist ?? {}),
-            histThickness: thickness,
-          };
+          next.perIndicator.macdHist = { ...(next.perIndicator.macdHist ?? {}), histThickness: thickness };
           return next;
         });
       },
     };
     return () => {
-      if (win.__probe) {
-        delete win.__probe[symbol];
-        if (!Object.keys(win.__probe).length) delete win.__probe;
+      if ((window as any).__probe) {
+        delete (window as any).__probe[symbol];
+        if (!Object.keys((window as any).__probe).length) delete (window as any).__probe;
       }
     };
-  }, [getSeriesCount, setStylePrefs, symbol]);
+  }, [getSeriesCount, qaProbeEnabled, setStylePrefs, symbol]);
 
   return (
     <div className="space-y-3">
@@ -861,7 +867,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         </div>
         <div className="flex gap-2">
           <IndicatorMenu timeframe={tf} />
-          <Button data-testid="reset-view" variant="secondary" onClick={() => chartRef.current?.timeScale().fitContent()}>
+          <Button data-testid="btn-reset-view" variant="secondary" onClick={() => chartRef.current?.timeScale().fitContent()}>
             Reset view
           </Button>
         </div>
@@ -881,7 +887,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       />
 
       <div className="relative">
-        <div ref={mainRef} className="w-full min-h-[320px]" style={{ minHeight: chartAreaHeight }} />
+        <div data-testid="chart-root" ref={mainRef} className="w-full min-h-[320px]" style={{ minHeight: chartAreaHeight }} />
         {isChartLoading && (
           <div className="absolute inset-0 grid place-items-center text-slate-400 bg-slate-900/40">Loading…</div>
         )}
@@ -891,11 +897,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       </div>
       {preset.useRSI && <div data-testid="pane-rsi" ref={rsiRef} className="w-full" style={{ minHeight: 140 }} />}
       {preset.useMACD && <div data-testid="pane-macd" ref={macdRef} className="w-full" style={{ minHeight: 180 }} />}
-      {showKdjPane && (
-        <div data-testid="pane-kdj">
-          <PaneKDJ k={kdjK} d={kdjD} j={kdjJ} lineWidths={kdjLineWidths} />
-        </div>
-      )}
+      {showKdjPane && <PaneKDJ data-testid="pane-kdj" k={kdjK} d={kdjD} j={kdjJ} lineWidths={kdjLineWidths} />}
 
       {showProbe && (
         <ChartProbe

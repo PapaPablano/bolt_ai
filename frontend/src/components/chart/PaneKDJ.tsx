@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import type { HTMLAttributes } from 'react';
 import { createChart, type ISeriesApi, type Time } from 'lightweight-charts';
 import type { LinePt } from '@/hooks/useIndicatorWorker';
 
@@ -24,7 +25,7 @@ const clampWidth = (value?: number): 1 | 2 | 3 | 4 => {
   return Math.max(1, Math.min(4, n)) as 1 | 2 | 3 | 4;
 };
 
-type Props = {
+type Props = Omit<HTMLAttributes<HTMLDivElement>, 'children'> & {
   height?: number;
   k: LinePt[];
   d: LinePt[];
@@ -32,7 +33,16 @@ type Props = {
   lineWidths?: LineWidths;
 };
 
-export default function PaneKDJ({ height = 120, k, d, j, lineWidths }: Props) {
+export default function PaneKDJ({
+  height = 120,
+  k,
+  d,
+  j,
+  lineWidths,
+  className,
+  style,
+  ...rest
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
   const kRef = useRef<ISeriesApi<'Line'> | null>(null);
@@ -107,7 +117,8 @@ export default function PaneKDJ({ height = 120, k, d, j, lineWidths }: Props) {
     jRef.current.setData(toSeries(j));
   }, [j]);
 
-  return <div ref={containerRef} className="w-full" style={{ minHeight: height }} />;
+  const mergedClass = ['w-full', className].filter(Boolean).join(' ');
+  return <div ref={containerRef} className={mergedClass} style={{ minHeight: height, ...style }} {...rest} />;
 }
 
 /* @__TEST_ONLY__ */

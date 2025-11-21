@@ -3,9 +3,11 @@ export {};
 declare global {
   interface Window {
     __probe?: {
-      macdBarSpacing: number | null;
-      seriesCount: number;
-      setMacdThickness: (t: 'thin' | 'normal' | 'wide') => void;
+      [symbol: string]: {
+        macdBarSpacing: number | null;
+        seriesCount: number;
+        setMacdThickness: (t: 'thin' | 'normal' | 'wide') => void;
+      };
     };
   }
 }

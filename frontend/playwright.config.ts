@@ -1,12 +1,39 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './tests/e2e',
-  timeout: 45_000,
-  expect: { timeout: 5_000 },
+  testDir: 'tests/e2e',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173',
-    trace: 'retain-on-failure',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+    locale: 'en-US',
+    colorScheme: 'dark',
+    reducedMotion: 'reduce',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium-dev',
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5173' },
+      webServer: {
+        command: 'npm run dev -- --host --port 5173',
+        url: 'http://localhost:5173',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
+    },
+    {
+      name: 'chromium-preview',
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5174' },
+      webServer: {
+        command: 'bash -lc "VITE_QA_PROBE=1 npm run build && npm run preview -- --host --port 5174"',
+        url: 'http://localhost:5174',
+        reuseExistingServer: !process.env.CI,
+        timeout: 180_000,
+      },
+    },
+  ],
 });
