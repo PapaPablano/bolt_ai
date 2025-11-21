@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { waitForCharts, probeKeys, resetClientState, TEST_SYMBOL, TEST_URL } from './utils';
+import { waitForCharts, probeKeys, resetClientState, gotoChart, TEST_SYMBOL } from './utils';
 
 test('indicator toggles persist across reload', async ({ page }) => {
   await resetClientState(page);
-  await page.goto(TEST_URL);
+  await gotoChart(page, { symbol: TEST_SYMBOL });
   await waitForCharts(page, { symbol: TEST_SYMBOL });
 
   const pane = page.getByTestId('pane-kdj');

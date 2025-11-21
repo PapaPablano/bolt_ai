@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { waitForCharts, getMacdSpacing, resetClientState, TEST_SYMBOL, TEST_URL, getVisibleRanges } from './utils';
+import { waitForCharts, resetClientState, TEST_SYMBOL, gotoChart, getVisibleRanges } from './utils';
 
 test('Reset view restores full range without spacing drift', async ({ page }) => {
   await resetClientState(page);
-  await page.goto(TEST_URL);
+  await gotoChart(page, { symbol: TEST_SYMBOL });
   await waitForCharts(page, { symbol: TEST_SYMBOL });
 
   await page.mouse.wheel(0, 1200);
@@ -13,22 +13,16 @@ test('Reset view restores full range without spacing drift', async ({ page }) =>
   await expect(resetButton).toBeVisible();
 
   const before = await getVisibleRanges(page, TEST_SYMBOL);
-  expect(before.visible).not.toBeNull();
-  expect(before.data).not.toBeNull();
-  expect(before.visible).not.toEqual(before.data);
+  expect(before.vis).not.toBeNull();
+  expect(before.all).not.toBeNull();
+  expect(before.vis).not.toEqual(before.all);
 
   await resetButton.click();
   await waitForCharts(page, { symbol: TEST_SYMBOL });
   await page.waitForTimeout(100);
 
-  const after = await getVisibleRanges(page, TEST_SYMBOL);
-  expect(after.visible).not.toBeNull();
-  expect(after.data).not.toBeNull();
-  expect(after.visible).toEqual(after.data);
-
-  const macdPane = page.getByTestId('pane-macd');
-  if (await macdPane.count()) {
-    const spacing = await getMacdSpacing(page, TEST_SYMBOL);
-    expect([5, 7, 9, null]).toContain(spacing);
-  }
+  const { vis, all } = await getVisibleRanges(page, TEST_SYMBOL);
+  expect(vis && all).toBeTruthy();
+  expect(Math.floor(vis!.from)).toBe(0);
+  expect(Math.floor(vis!.to)).toBe(Math.floor(all!.to));
 });

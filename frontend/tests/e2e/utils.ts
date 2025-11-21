@@ -1,7 +1,6 @@
 import { Page } from '@playwright/test';
 
 export const TEST_SYMBOL = 'AAPL';
-export const TEST_URL = `/?symbol=${TEST_SYMBOL}`;
 
 const resolveSymbol = (symbol?: string) => (symbol ?? TEST_SYMBOL).toUpperCase();
 
@@ -15,6 +14,20 @@ export async function resetClientState(page: Page) {
       // best-effort cleanup
     }
   });
+}
+
+export async function gotoChart(
+  page: Page,
+  { symbol = TEST_SYMBOL, mock = true, seed = 1337, mockEnd }: { symbol?: string; mock?: boolean; seed?: number; mockEnd?: number } = {},
+) {
+  const qs = new URLSearchParams();
+  qs.set('symbol', resolveSymbol(symbol));
+  if (mock) {
+    qs.set('mock', '1');
+    qs.set('seed', String(seed));
+    if (mockEnd) qs.set('mockEnd', String(mockEnd));
+  }
+  await page.goto(`/?${qs.toString()}`);
 }
 
 export async function waitForCharts(page: Page, opts: { symbol?: string } = {}) {
@@ -77,10 +90,10 @@ export async function getVisibleRanges(page: Page, symbol?: string) {
     ({ symbol: sym }: { symbol: string }) => {
       const root = (window as any).__probe ?? {};
       const entry = root[sym];
-      if (!entry) return { visible: null, data: null };
+      if (!entry) return { vis: null, all: null };
       return {
-        visible: entry.visibleLogicalRange ?? null,
-        data: entry.dataLogicalRange ?? null,
+        vis: entry.visibleLogicalRange ?? null,
+        all: entry.dataLogicalRange ?? null,
       };
     },
     { symbol: target },

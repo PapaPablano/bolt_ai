@@ -78,12 +78,18 @@ const rangeToMinutes = (value: Range | string): number => {
   }
 };
 export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initialRange = '1Y', height = 520 }: Props) {
-  const [mockMode] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
+  const [{ mockMode, mockSeed, mockEnd }] = useState(() => {
+    if (typeof window === 'undefined') return { mockMode: false, mockSeed: 1337, mockEnd: Date.now() };
     try {
-      return new URL(window.location.href).searchParams.get('mock') === '1';
+      const params = new URL(window.location.href).searchParams;
+      const isMock = params.get('mock') === '1';
+      const parsedSeed = Number.parseInt(params.get('seed') ?? '1337', 10);
+      const seed = Number.isFinite(parsedSeed) ? parsedSeed : 1337;
+      const parsedEnd = Number.parseInt(params.get('mockEnd') ?? `${Date.now()}`, 10);
+      const end = Number.isFinite(parsedEnd) ? parsedEnd : Date.now();
+      return { mockMode: isMock, mockSeed: seed, mockEnd: end };
     } catch {
-      return false;
+      return { mockMode: false, mockSeed: 1337, mockEnd: Date.now() };
     }
   });
   const { enabled: probeEnabled } = useProbeToggle();
@@ -135,19 +141,21 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         QA: import.meta.env.VITE_QA_PROBE === '1',
         symbol,
         mockMode,
+        seed: mockSeed,
+        mockEnd,
       });
     } catch {
       /* noop */
     }
   }
 
-  const historyResult = useHistoricalBars(symbol, tf, range);
-  const liveResult = useLiveBars(symbol, tf, { enabled: !mockMode });
-  const mockHistory = useMemo(() => (mockMode ? genMockBars({ minutes: rangeToMinutes(range) }) : null), [mockMode, range]);
-  const historySource = useMemo<ApiBar[]>(() => {
-    if (mockHistory) {
-      return mockHistory.map((bar) => ({
-        time: new Date((bar.time as number) * 1000).toISOString(),
+  const hist = useHistoricalBars(symbol, tf, range);
+  const live = useLiveBars(symbol, tf, { enabled: !mockMode });
+  const bars = useMemo<ApiBar[]>(() => {
+    if (mockMode) {
+      const synthetic = genMockBars({ minutes: rangeToMinutes(range), end: mockEnd, seed: mockSeed });
+      return synthetic.map((bar) => ({
+        time: new Date(fromChartTimeValue(bar.time) * 1000).toISOString(),
         open: bar.open,
         high: bar.high,
         low: bar.low,
@@ -155,16 +163,16 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         volume: 0,
       }));
     }
-    return historyResult.data ?? [];
-  }, [historyResult.data, mockHistory]);
-  const liveBar = mockMode ? null : liveResult.bar;
+    return hist.data ?? [];
+  }, [hist.data, mockMode, mockEnd, mockSeed, range]);
+  const liveBar = mockMode ? null : live.bar;
 
-  const isChartLoading = prefsLoading || (!mockMode && historyResult.isLoading);
+  const isChartLoading = prefsLoading || (!mockMode && hist.isLoading);
   const auxPanelHeight = (preset.useMACD ? 180 : 0) + (preset.useRSI ? 140 : 0);
   const chartAreaHeight = Math.max(height - auxPanelHeight, 320);
   const lastVisibleRangeRef = useRef<{ from: number; to: number } | null>(null);
   const rangeThrottleRef = useRef<number | null>(null);
-  const chartError = mockMode ? null : historyResult.error;
+  const chartError = mockMode ? null : hist.error;
 
   const normalizeWorkerSeries = (series: LinePt[]) =>
     series.filter((pt) => Number.isFinite(pt.value)).map((pt) => ({ time: pt.time, value: pt.value }));
@@ -723,16 +731,16 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   ]);
 
   useEffect(() => {
-    if (!history || !candleRef.current) return;
+    if (!bars.length || !candleRef.current) return;
 
-    if (import.meta.env.DEV && history.length) {
-      const maybeNumericTime = (history[0] as ApiBar | undefined)?.time as unknown;
+    if (import.meta.env.DEV) {
+      const maybeNumericTime = bars[0]?.time as unknown;
       if (typeof maybeNumericTime === 'number' && Math.abs(maybeNumericTime) < 1e12) {
         console.warn('[chart] Expected ms timestamps; got seconds');
       }
     }
 
-    const pre = preprocessOhlcv(history, { timeframe: tf, maxGapBuckets: 3, capStdDevs: 6 });
+    const pre = preprocessOhlcv(bars, { timeframe: tf, maxGapBuckets: 3, capStdDevs: 6 });
     if (pre.msgs.length && import.meta.env.DEV) console.debug('[preprocess]', pre.msgs.join(' | '));
 
     const cleaned = pre.bars;
@@ -767,7 +775,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     chartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
     macdChartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
     rsiChartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
-  }, [applyVisibleDecimation, history, indicatorWorker, preset, tf]);
+  }, [applyVisibleDecimation, bars, indicatorWorker, preset, tf]);
 
   useEffect(() => {
     lastTimeSecRef.current = null;
@@ -789,6 +797,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   }, [indicatorWorker, range, symbol, tf]);
 
   useEffect(() => {
+    if (mockMode) return;
     if (!liveBar || !candleRef.current) return;
     if (!seedBarsRef.current.length) return;
 
@@ -867,7 +876,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     shouldRedecimate = true;
 
     if (shouldRedecimate) applyVisibleDecimation(lastVisibleRangeRef.current);
-  }, [applyVisibleDecimation, indicatorWorker, liveBar, preset, tf]);
+  }, [applyVisibleDecimation, indicatorWorker, liveBar, mockMode, preset, tf]);
 
   const getSeriesCount = useCallback(
     () =>
@@ -950,6 +959,12 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         </div>
       </div>
 
+      {chartError && (
+        <div data-testid="chart-error" className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+          {String(chartError)}
+        </div>
+      )}
+
       <IndicatorPanel
         initial={indicatorPanelInitials}
         toggles={indicatorToggles}
@@ -967,9 +982,6 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         <div data-testid="chart-root" ref={mainRef} className="w-full min-h-[320px]" style={{ minHeight: chartAreaHeight }} />
         {isChartLoading && (
           <div className="absolute inset-0 grid place-items-center text-slate-400 bg-slate-900/40">Loading…</div>
-        )}
-        {error && !isChartLoading && (
-          <div className="absolute inset-0 grid place-items-center text-red-400 bg-slate-900/60">Failed to load data.</div>
         )}
       </div>
       {preset.useRSI && <div data-testid="pane-rsi" ref={rsiRef} className="w-full" style={{ minHeight: 140 }} />}

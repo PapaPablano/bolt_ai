@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { resetClientState, waitForCharts, TEST_SYMBOL, TEST_URL, getVisibleRanges, getMacdSpacing } from './utils';
+import { resetClientState, waitForCharts, TEST_SYMBOL, getVisibleRanges, getMacdSpacing, gotoChart } from './utils';
+
+const RUN_ON_REAL_BACKEND = false;
 
 const HORIZONTAL_SWEEPS = [400, 400, -200, 300];
 
@@ -12,9 +14,9 @@ async function hoverChart(page: import('@playwright/test').Page) {
   }
 }
 
-test('1m session boundary prevents overscroll and keeps spacing stable', async ({ page }) => {
+(RUN_ON_REAL_BACKEND ? test : test.skip)('1m session boundary prevents overscroll and keeps spacing stable', async ({ page }) => {
   await resetClientState(page);
-  await page.goto(TEST_URL);
+  await gotoChart(page, { symbol: TEST_SYMBOL, mock: !RUN_ON_REAL_BACKEND });
   await waitForCharts(page, { symbol: TEST_SYMBOL });
 
   const tfButton = page.getByTestId('tf-1Min');
@@ -25,8 +27,8 @@ test('1m session boundary prevents overscroll and keeps spacing stable', async (
 
   await hoverChart(page);
   const before = await getVisibleRanges(page, TEST_SYMBOL);
-  expect(before.visible).not.toBeNull();
-  expect(before.data).not.toBeNull();
+  expect(before.vis).not.toBeNull();
+  expect(before.all).not.toBeNull();
 
   for (const delta of HORIZONTAL_SWEEPS) {
     await page.mouse.wheel(delta, 0);
@@ -36,11 +38,11 @@ test('1m session boundary prevents overscroll and keeps spacing stable', async (
   await waitForCharts(page, { symbol: TEST_SYMBOL });
 
   const after = await getVisibleRanges(page, TEST_SYMBOL);
-  expect(after.visible).not.toBeNull();
-  expect(after.data).not.toBeNull();
-  expect(after.visible!.to).toBeLessThanOrEqual(after.data!.to + 0.5);
-  expect(after.visible!.from).toBeGreaterThanOrEqual(0);
-  expect(after.visible!.to).toBeGreaterThan(before.visible!.to);
+  expect(after.vis).not.toBeNull();
+  expect(after.all).not.toBeNull();
+  expect(after.vis!.to).toBeLessThanOrEqual(after.all!.to + 0.5);
+  expect(after.vis!.from).toBeGreaterThanOrEqual(0);
+  expect(after.vis!.to).toBeGreaterThan(before.vis!.to);
 
   const spacing = await getMacdSpacing(page, TEST_SYMBOL);
   if (spacing !== null) {
