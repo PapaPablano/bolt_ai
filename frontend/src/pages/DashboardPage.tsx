@@ -36,13 +36,18 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
   const [chartData, setChartData] = useState<BarData[]>([]);
   const [isLoadingChart, setIsLoadingChart] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
-  const forceChartRender =
-    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mock') === '1';
+  const [forceChartRender, setForceChartRender] = useState(false);
   const announce = useAnnouncement();
   const { prefs, loading: prefsLoading } = useChartPrefs();
   const tf = prefs.default_timeframe;
   const range = prefs.default_range;
   const { data: histBars, isLoading: barsLoading } = useHistoricalBars(selectedSymbol, tf, range);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sp = new URLSearchParams(window.location.search);
+    setForceChartRender(sp.get('mock') === '1');
+  }, []);
 
   useEffect(() => {
     const loadWatchlist = async () => {

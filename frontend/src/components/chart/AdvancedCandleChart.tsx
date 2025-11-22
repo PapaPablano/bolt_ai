@@ -33,6 +33,7 @@ import { genMockBars } from '@/utils/mock';
 type Props = { symbol: string; initialTf?: TF; initialRange?: Range; height?: number };
 type ProbeState = { ok: boolean; error?: string; lastEvent?: string };
 type ChartTimeRange = { from: Time | null; to: Time | null };
+type BootStage = 'none' | 'container-mounted' | 'chart-created' | 'candle-series-created' | 'seed-bars-ready';
 
 export const mergePanePatch = (prev: WorkerLinePt[], patch?: WorkerLinePt[]): WorkerLinePt[] => {
   if (!patch?.length) return prev;
@@ -190,6 +191,29 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const lastVisibleRangeRef = useRef<{ from: number; to: number } | null>(null);
   const rangeThrottleRef = useRef<number | null>(null);
   const chartError = mockMode ? null : hist.error;
+  const stageRef = useRef<BootStage>('none');
+  const recordStage = useCallback(
+    (stage: BootStage) => {
+      stageRef.current = stage;
+      if (!qaProbeEnabled || typeof window === 'undefined') return;
+      try {
+        const boot = (window as any).__probeBoot;
+        if (boot?.stages?.push) {
+          boot.stages.push({ stage, ts: Date.now() });
+          if (boot.stages.length > 50) boot.stages.splice(0, boot.stages.length - 50);
+        }
+      } catch {
+        /* noop */
+      }
+    },
+    [qaProbeEnabled],
+  );
+
+  useEffect(() => {
+    if (!qaProbeEnabled) {
+      recordStage('none');
+    }
+  }, [qaProbeEnabled, recordStage]);
 
   const normalizeWorkerSeries = (series: LinePt[]) =>
     series.filter((pt) => Number.isFinite(pt.value)).map((pt) => ({ time: pt.time, value: pt.value }));
@@ -621,7 +645,6 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   }, [applyVisibleDecimation, range, symbol, tf]);
 
   useLayoutEffect(() => {
-    if (isChartLoading) return;
     const container = mainRef.current;
     if (!container) {
       console.warn('[chart] missing container');
@@ -629,6 +652,8 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       logProbeEvent('no-container');
       return;
     }
+
+    if (qaProbeEnabled) recordStage('container-mounted');
 
     chartRef.current?.remove();
     macdChartRef.current?.remove();
@@ -658,10 +683,12 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         layout: { background: { color: '#0b1224' }, textColor: '#cbd5e1' },
       });
       chartRef.current = chart;
+      if (qaProbeEnabled) recordStage('chart-created');
       candleRef.current = chart.addCandlestickSeries({
         lastValueVisible: true,
         priceLineVisible: true,
       });
+      if (qaProbeEnabled) recordStage('candle-series-created');
       setProbeState({ ok: true, lastEvent: 'init', error: undefined });
       if (import.meta.env.DEV) console.debug('[chart] init complete');
 
@@ -745,6 +772,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         macdHistRef.current = null;
         setProbeState((prev) => ({ ...prev, ok: false }));
         logProbeEvent('cleanup');
+        if (qaProbeEnabled) recordStage('none');
       };
     } catch (err) {
       console.error('[chart] init failed', err);
@@ -760,7 +788,6 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     applyVisibleDecimation,
     chartAreaHeight,
     height,
-    isChartLoading,
     preset.useBB,
     preset.useEMA,
     preset.useMACD,
@@ -797,6 +824,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     });
     const normalized = normalizeHistoricalBars(cleaned.map(toChartBar), tf);
     seedBarsRef.current = normalized;
+    if (qaProbeEnabled && normalized.length) recordStage('seed-bars-ready');
     setSeedBarsVersion((prev) => prev + 1);
 
     const entireRange =
@@ -1077,12 +1105,27 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         enumerable: true,
         get: () => econEventsRef.current?.length ?? 0,
       },
+      bootStage: {
+        configurable: true,
+        enumerable: true,
+        get: () => stageRef.current,
+      },
       econMarkerCount: {
         configurable: true,
         enumerable: true,
         get: () => econMarkerCountRef.current,
       },
     });
+
+    try {
+      const boot = (window as any).__probeBoot;
+      if (boot?.mounted?.push) {
+        boot.mounted.push({ symbol, ts: Date.now() });
+        if (boot.mounted.length > 20) boot.mounted.splice(0, boot.mounted.length - 20);
+      }
+    } catch {
+      /* noop */
+    }
 
     if (import.meta.env.DEV) {
       try {
@@ -1098,6 +1141,16 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       if (!r) return;
       if (r[symbol]) delete r[symbol];
       if (!Object.keys(r).length) delete (window as any).__probe;
+      try {
+        const boot = (window as any).__probeBoot;
+        if (boot?.unmounted?.push) {
+          boot.unmounted.push({ symbol, ts: Date.now() });
+          if (boot.unmounted.length > 20) boot.unmounted.splice(0, boot.unmounted.length - 20);
+        }
+      } catch {
+        /* noop */
+      }
+
       if (import.meta.env.DEV) {
         try {
           // eslint-disable-next-line no-console

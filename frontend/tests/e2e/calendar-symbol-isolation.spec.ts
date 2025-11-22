@@ -1,5 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { gotoChart, waitForCharts, readProbeCounts, resetClientState } from './utils';
+import { gotoChart, waitForCharts, readProbeCounts, resetClientState, debugTrackedProbePages, clearTrackedProbePages } from './utils';
+
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status !== testInfo.expectedStatus) {
+    await debugTrackedProbePages(testInfo.title);
+  }
+  clearTrackedProbePages();
+});
 
 test('Calendar markers are isolated per symbol namespace', async ({ browser }) => {
   const ctx = await browser.newContext();

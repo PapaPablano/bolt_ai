@@ -1,5 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { gotoChart, waitForCharts, resetClientState } from './utils';
+import { gotoChart, waitForCharts, resetClientState, debugTrackedProbePages, clearTrackedProbePages } from './utils';
+
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status !== testInfo.expectedStatus) {
+    await debugTrackedProbePages(testInfo.title);
+  }
+  clearTrackedProbePages();
+});
 
 test('calendar toggle applies and clears markers (mocked)', async ({ page }) => {
   await resetClientState(page);
