@@ -12,41 +12,42 @@ export default defineConfig({
     video: 'retain-on-failure',
     locale: 'en-US',
     colorScheme: 'dark',
-    reducedMotion: 'reduce',
   },
   projects: [
     {
       name: 'chromium-dev',
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5173' },
-      webServer: {
-        command: 'npm run dev -- --host --port 5173',
-        url: 'http://localhost:5173',
-        reuseExistingServer: !process.env.CI,
-        timeout: 180_000,
-        env: {
-          NODE_ENV: 'development',
-          VITE_QA_PROBE: '1',
-          VITE_DEFAULT_SYMBOL: 'AAPL',
-          VITE_API_URL: process.env.VITE_API_URL ?? 'http://localhost:8000',
-          VITE_WS_URL: process.env.VITE_WS_URL ?? 'ws://localhost:8000/ws',
-        },
-      },
     },
     {
       name: 'chromium-preview',
       use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5174' },
-      webServer: {
-        command: 'bash -lc "VITE_QA_PROBE=1 npm run build && npm run preview -- --host --port 5174"',
-        url: 'http://localhost:5174',
-        reuseExistingServer: !process.env.CI,
-        timeout: 240_000,
-        env: {
-          NODE_ENV: 'production',
-          VITE_QA_PROBE: '1',
-          VITE_DEFAULT_SYMBOL: 'AAPL',
-          VITE_API_URL: process.env.VITE_API_URL ?? 'http://localhost:8000',
-          VITE_WS_URL: process.env.VITE_WS_URL ?? 'ws://localhost:8000/ws',
-        },
+    },
+  ],
+  webServer: [
+    {
+      command: 'npm run dev -- --host --port 5173',
+      url: 'http://localhost:5173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+      env: {
+        NODE_ENV: 'development',
+        VITE_QA_PROBE: '1',
+        VITE_DEFAULT_SYMBOL: 'AAPL',
+        VITE_API_URL: process.env.VITE_API_URL ?? 'http://localhost:8000',
+        VITE_WS_URL: process.env.VITE_WS_URL ?? 'ws://localhost:8000/ws',
+      },
+    },
+    {
+      command: 'bash -lc "VITE_QA_PROBE=1 npm run build && npm run preview -- --host --port 5174"',
+      url: 'http://localhost:5174',
+      reuseExistingServer: !process.env.CI,
+      timeout: 240_000,
+      env: {
+        NODE_ENV: 'production',
+        VITE_QA_PROBE: '1',
+        VITE_DEFAULT_SYMBOL: 'AAPL',
+        VITE_API_URL: process.env.VITE_API_URL ?? 'http://localhost:8000',
+        VITE_WS_URL: process.env.VITE_WS_URL ?? 'ws://localhost:8000/ws',
       },
     },
   ],

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import type { ChartPrefs, TF, Range, TfPreset } from '@/types/prefs';
-import { DEFAULT_PRESETS, DEFAULT_RANGE, DEFAULT_TF } from '@/types/prefs';
+import { DEFAULT_CALENDAR_PREFS, DEFAULT_PRESETS, DEFAULT_RANGE, DEFAULT_TF } from '@/types/prefs';
 import { DEFAULT_INDICATOR_STYLE_PREFS, cloneIndicatorStylePrefs, type IndicatorStylePrefs } from '@/types/indicator-styles';
 
 const LS_KEY = 'chart_prefs_v2';
@@ -26,6 +26,7 @@ const mergeDefaults = (p?: Partial<ChartPrefs>): ChartPrefs => {
     default_range: (p?.default_range ?? DEFAULT_RANGE) as Range,
     presets,
     styles: cloneIndicatorStylePrefs(ensureStyles(p?.styles ?? DEFAULT_INDICATOR_STYLE_PREFS)),
+    calendar: p?.calendar ?? DEFAULT_CALENDAR_PREFS,
   };
 };
 
@@ -83,6 +84,7 @@ export function useChartPrefs() {
           default_range: initial.default_range,
           presets: initial.presets,
           styles: initial.styles,
+          calendar: initial.calendar,
         });
         setPrefs(initial);
       } else {
@@ -114,6 +116,7 @@ export function useChartPrefs() {
           default_range: prefs.default_range,
           presets: prefs.presets,
           styles: prefs.styles,
+          calendar: prefs.calendar,
         });
     }, 400) as unknown as number;
 

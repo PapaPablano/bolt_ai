@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as LWC from 'lightweight-charts';
 import type { BusinessDay, CandlestickData, HistogramData, ISeriesApi, Time, UTCTimestamp } from 'lightweight-charts';
-import type { TF, Range, TfPreset } from '@/types/prefs';
+import { DEFAULT_CALENDAR_PREFS, type TF, type Range, type TfPreset } from '@/types/prefs';
 import type { Bar as ApiBar } from '@/types/bars';
 import { useChartPrefs } from '@/hooks/useChartPrefs';
 import type { IndicatorStylePrefs } from '@/types/indicator-styles';
@@ -19,9 +19,9 @@ import type { LinePt, StPerfParams } from '@/utils/indicators-supertrend-perf';
 import { assertBucketInvariant } from '@/utils/devInvariants';
 import { downsampleOhlcVisible } from '@/utils/ohlc-decimator';
 import { IndicatorPanel, type KdjPanelParams } from '@/components/IndicatorPanel';
-import type { PanelIndicatorName } from '@/types/indicators';
 import { fetchCalendar, type EconEvent } from '@/api/calendar';
 import { applyEventMarkers } from '@/components/chart/EconEventsOverlay';
+import { isWorkerIndicator, type PanelIndicatorName } from '@/types/indicators';
 import { ChartProbe } from './ChartProbe';
 import { IndicatorMenu } from './IndicatorMenu';
 import { IntervalBar } from './IntervalBar';
@@ -32,7 +32,6 @@ import { genMockBars } from '@/utils/mock';
 
 type Props = { symbol: string; initialTf?: TF; initialRange?: Range; height?: number };
 type ProbeState = { ok: boolean; error?: string; lastEvent?: string };
-type WorkerIndicatorName = Exclude<PanelIndicatorName, 'KDJ'>;
 type ChartTimeRange = { from: Time | null; to: Time | null };
 
 export const mergePanePatch = (prev: WorkerLinePt[], patch?: WorkerLinePt[]): WorkerLinePt[] => {
@@ -48,9 +47,9 @@ export const mergePanePatch = (prev: WorkerLinePt[], patch?: WorkerLinePt[]): Wo
 const envVars = import.meta.env as Record<string, string | undefined>;
 const tvFlag = (envVars.VITE_CHART_VENDOR ?? envVars.VITE_USE_TRADINGVIEW ?? '').toLowerCase();
 const USING_TV = tvFlag === 'tradingview' || tvFlag === 'true';
-const qaProbeEnabled = import.meta.env.DEV || import.meta.env.VITE_QA_PROBE === '1';
 
 const SESSION_MS = CLOSE_OFFSET_MS - OPEN_OFFSET_MS;
+const CALENDAR_DEBOUNCE_MS = 200;
 // MACD spacing is idempotent: targets stay stable regardless of zoom history.
 const MACD_SPACING_TARGETS: Record<'thin' | 'normal' | 'wide', number> = { thin: 5, normal: 7, wide: 9 };
 const MINUTES_PER_TRADING_DAY = 390;
@@ -80,6 +79,10 @@ const rangeToMinutes = (value: Range | string): number => {
   }
 };
 export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initialRange = '1Y', height = 520 }: Props) {
+  const qaProbeEnabled =
+    import.meta.env.DEV ||
+    import.meta.env.VITE_QA_PROBE === '1' ||
+    (typeof window !== 'undefined' && ((window as any).__QA_PROBE__ === '1' || new URLSearchParams(window.location.search).get('probe') === '1'));
   const [{ mockMode, mockSeed, mockEnd }] = useState(() => {
     if (typeof window === 'undefined') return { mockMode: false, mockSeed: 1337, mockEnd: Date.now() };
     try {
@@ -99,6 +102,10 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const tf: TF = prefs.default_timeframe ?? initialTf;
   const range: Range = prefs.default_range ?? initialRange;
   const preset = getTfPreset(tf);
+  const calendarPrefs = prefs.calendar ?? DEFAULT_CALENDAR_PREFS;
+  const calendarCountries = calendarPrefs.countries?.length ? calendarPrefs.countries : DEFAULT_CALENDAR_PREFS.countries;
+  const calendarCountriesKey = calendarCountries.join(',');
+  const calendarMinImpact = calendarPrefs.minImpact ?? DEFAULT_CALENDAR_PREFS.minImpact;
 
   const mainRef = useRef<HTMLDivElement | null>(null);
   const macdRef = useRef<HTMLDivElement | null>(null);
@@ -126,9 +133,14 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const lastBarRef = useRef<ChartBar | null>(null);
   const seedBarsRef = useRef<ChartBar[]>([]);
   const econEventsRef = useRef<EconEvent[] | null>(null);
+  const econMarkerCountRef = useRef(0);
+  const calendarAbortRef = useRef<AbortController | null>(null);
+  const calendarTimerRef = useRef<number | null>(null);
+  const calendarSigRef = useRef<string | null>(null);
 
   const [probeState, setProbeState] = useState<ProbeState>({ ok: false, lastEvent: 'idle' });
   const [econEventsLen, setEconEventsLen] = useState(0);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
   const [seedBarsVersion, setSeedBarsVersion] = useState(0);
   const logProbeEvent = (msg: string) => {
     if (import.meta.env.DEV) console.debug('[chart]', msg);
@@ -253,6 +265,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       preset.useCalendar,
     ],
   );
+  const calendarEnabled = indicatorToggles.Calendar || !!preset.useCalendar;
 
   const indicatorWorker = useIndicatorWorker(symbol, tf, {
     onOverlayFull: handleWorkerOverlayFull,
@@ -470,6 +483,16 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     }
   }, []);
 
+  const clearCalendarMarkers = useCallback(() => {
+    try {
+      candleRef.current?.setMarkers?.([] as any);
+    } catch {
+      /* noop */
+    }
+    econMarkerCountRef.current = 0;
+    calendarSigRef.current = null;
+  }, []);
+
   const handleIndicatorToggle = useCallback(
     (name: PanelIndicatorName, on: boolean) => {
       if (name === 'Calendar') {
@@ -482,6 +505,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         updateTfPreset(tf, { useKDJ: on });
         return;
       }
+      if (!isWorkerIndicator(name)) return;
       indicatorWorker.toggle(name, on);
       if (!on) clearIndicatorSeries(name);
       const patch: Partial<TfPreset> = {};
@@ -564,8 +588,8 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   }, [vwapPanelDefaults]);
 
   useEffect(() => {
-    const workerNames: WorkerIndicatorName[] = ['STAI', 'EMA', 'RSI', 'VWAP', 'BB', 'MACD'];
-    workerNames.forEach((name) => {
+    (Object.keys(indicatorToggles) as PanelIndicatorName[]).forEach((name) => {
+      if (!isWorkerIndicator(name)) return;
       const on = indicatorToggles[name];
       indicatorWorker.toggle(name, on);
       if (!on) clearIndicatorSeries(name);
@@ -816,77 +840,92 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     indicatorWorker.setHistory([]);
     econEventsRef.current = null;
     setEconEventsLen(0);
-    candleRef.current?.setMarkers([]);
+    clearCalendarMarkers();
     setSeedBarsVersion((prev) => prev + 1);
-  }, [indicatorWorker, range, symbol, tf]);
+  }, [indicatorWorker, range, symbol, tf, clearCalendarMarkers]);
 
   useEffect(() => {
     const series = candleRef.current;
     const bars = seedBarsRef.current;
-    if (!series) return;
-    if (!bars.length) {
+
+    if (calendarTimerRef.current) {
+      window.clearTimeout(calendarTimerRef.current);
+      calendarTimerRef.current = null;
+    }
+    calendarAbortRef.current?.abort();
+    calendarAbortRef.current = null;
+
+    if (!series || !bars.length || !calendarEnabled) {
       econEventsRef.current = null;
       setEconEventsLen(0);
-      try {
-        series.setMarkers([]);
-      } catch {
-        /* noop */
-      }
+      econMarkerCountRef.current = 0;
+      calendarSigRef.current = null;
+      setCalendarError(null);
+      clearCalendarMarkers();
       return;
     }
 
-    const calendarOn = !!preset.useCalendar;
-    if (!calendarOn) {
-      econEventsRef.current = null;
-      setEconEventsLen(0);
-      try {
-        series.setMarkers([]);
-      } catch {
-        /* noop */
-      }
-      return;
-    }
+    const controller = new AbortController();
+    calendarAbortRef.current = controller;
 
-    let cancelled = false;
-    const start = bars[0].time;
-    const end = bars[bars.length - 1].time;
-
-    (async () => {
+    calendarTimerRef.current = window.setTimeout(async () => {
       try {
+        const start = bars[0].time;
+        const end = bars[bars.length - 1].time;
+        setCalendarError(null);
         const events = await fetchCalendar({
           start,
           end,
-          countries: ['US', 'EU', 'GB'],
-          minImpact: 'medium',
+          countries: calendarCountries,
+          minImpact: calendarMinImpact,
+          signal: controller.signal,
         });
-        if (cancelled) return;
-        econEventsRef.current = events;
+        if (controller.signal.aborted) return;
+        const sig = events.length ? events.map((e) => `${e.id}:${e.ts}`).join('|') : 'empty';
+        if (sig !== calendarSigRef.current) {
+          calendarSigRef.current = sig;
+          econEventsRef.current = events;
+          const applied = applyEventMarkers(series, events, bars);
+          econMarkerCountRef.current = applied;
+        }
         setEconEventsLen(events.length);
-        applyEventMarkers(series, events, bars);
       } catch (err) {
-        if (import.meta.env.DEV) console.warn('[calendar] fetch failed', err);
+        if (controller.signal.aborted) return;
+        setCalendarError(err instanceof Error ? err.message : 'Calendar fetch failed');
         econEventsRef.current = null;
         setEconEventsLen(0);
-        try {
-          series.setMarkers([]);
-        } catch {
-          /* noop */
-        }
+        econMarkerCountRef.current = 0;
+        calendarSigRef.current = null;
+        clearCalendarMarkers();
+        if (import.meta.env.DEV) console.warn('[calendar] fetch failed', err);
       }
-    })();
+    }, CALENDAR_DEBOUNCE_MS) as unknown as number;
 
     return () => {
-      cancelled = true;
+      if (calendarTimerRef.current) {
+        window.clearTimeout(calendarTimerRef.current);
+        calendarTimerRef.current = null;
+      }
+      calendarAbortRef.current?.abort();
+      calendarAbortRef.current = null;
     };
-  }, [preset.useCalendar, seedBarsVersion, symbol, tf]);
+  }, [
+    calendarCountriesKey,
+    calendarEnabled,
+    calendarMinImpact,
+    seedBarsVersion,
+    symbol,
+    tf,
+  ]);
 
   useEffect(() => {
     const series = candleRef.current;
     const bars = seedBarsRef.current;
     const events = econEventsRef.current;
-    if (!series || !events?.length || !bars.length) return;
-    applyEventMarkers(series, events, bars);
-  }, [seedBarsVersion, econEventsLen]);
+    if (!series || !bars.length || !events?.length) return;
+    const applied = applyEventMarkers(series, events, bars);
+    econMarkerCountRef.current = applied;
+  }, [econEventsLen, seedBarsVersion]);
 
   useEffect(() => {
     if (mockMode) return;
@@ -926,7 +965,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       series.update(formatBarForChart(merged));
       lastBarRef.current = merged;
       seedBarsRef.current[seedBarsRef.current.length - 1] = merged;
-      updateStreamingIndicators(merged);
+      updateStreamingIndicators();
       indicatorWorker.liveBar(toCandle(merged), false);
       return;
     }
@@ -945,7 +984,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         seedBarsRef.current.push(flat);
         lastTimeSecRef.current = fillT;
         lastBarRef.current = flat;
-        updateStreamingIndicators(flat);
+        updateStreamingIndicators();
         indicatorWorker.liveBar(toCandle(flat), true);
         fillT += step;
       }
@@ -963,7 +1002,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     seedBarsRef.current.push(opened);
     lastTimeSecRef.current = alignedSec;
     lastBarRef.current = opened;
-    updateStreamingIndicators(opened);
+    updateStreamingIndicators();
     indicatorWorker.liveBar(toCandle(opened), false);
     shouldRedecimate = true;
 
@@ -990,45 +1029,76 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   // QA probe (namespaced by symbol) available in dev and flagged preview builds
   useEffect(() => {
     if (!qaProbeEnabled) return;
-    const root = (window as any).__probe ?? ((window as any).__probe = {});
-    root[symbol] = {
-      get macdBarSpacing() {
-        return macdChartRef.current?.timeScale().options().barSpacing ?? null;
+    const w = window as any;
+    const root = (w.__probe ??= {});
+    const entry = (root[symbol] ??= {});
+
+    Object.defineProperties(entry, {
+      macdBarSpacing: {
+        configurable: true,
+        enumerable: true,
+        get: () => macdChartRef.current?.timeScale().options().barSpacing ?? null,
       },
-      get seriesCount() {
-        return getSeriesCount();
+      seriesCount: {
+        configurable: true,
+        enumerable: true,
+        get: () => getSeriesCount(),
       },
-      get visibleLogicalRange() {
-        const range = chartRef.current?.timeScale().getVisibleLogicalRange();
-        return range ? { from: range.from, to: range.to } : null;
+      visibleLogicalRange: {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          const range = chartRef.current?.timeScale().getVisibleLogicalRange();
+          return range ? { from: range.from, to: range.to } : null;
+        },
       },
-      get dataLogicalRange() {
-        const base = chartRef.current?.timeScale();
-        if (!base || !seedBarsRef.current.length) return null;
-        return { from: 0, to: seedBarsRef.current.length - 1 };
+      dataLogicalRange: {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          const bars = seedBarsRef.current;
+          return bars?.length ? { from: 0, to: bars.length - 1 } : null;
+        },
       },
-      setMacdThickness: (thickness: 'thin' | 'normal' | 'wide') => {
-        setStylePrefs((prev) => {
-          const next = cloneIndicatorStylePrefs(prev);
-          next.perIndicator = next.perIndicator ?? {};
-          next.perIndicator.macdHist = { ...(next.perIndicator.macdHist ?? {}), histThickness: thickness };
-          return next;
-        });
+      setMacdThickness: {
+        configurable: true,
+        enumerable: true,
+        value: (thickness: 'thin' | 'normal' | 'wide') => {
+          setStylePrefs((prev) => {
+            const next = cloneIndicatorStylePrefs(prev);
+            next.perIndicator = next.perIndicator ?? {};
+            next.perIndicator.macdHist = { ...(next.perIndicator.macdHist ?? {}), histThickness: thickness };
+            return next;
+          });
+        },
       },
-      get econEventCount() {
-        return econEventsRef.current?.length ?? 0;
+      econEventCount: {
+        configurable: true,
+        enumerable: true,
+        get: () => econEventsRef.current?.length ?? 0,
       },
-    };
-    try {
-      // eslint-disable-next-line no-console
-      console.debug('[qa-probe] mounted', { symbol, namespaces: Object.keys((window as any).__probe ?? {}) });
-    } catch {
-      /* noop */
+      econMarkerCount: {
+        configurable: true,
+        enumerable: true,
+        get: () => econMarkerCountRef.current,
+      },
+    });
+
+    if (import.meta.env.DEV) {
+      try {
+        // eslint-disable-next-line no-console
+        console.debug('[qa-probe] mounted', { symbol, namespaces: Object.keys(root) });
+      } catch {
+        /* noop */
+      }
     }
+
     return () => {
-      if ((window as any).__probe) {
-        delete (window as any).__probe[symbol];
-        if (!Object.keys((window as any).__probe).length) delete (window as any).__probe;
+      const r = (window as any).__probe;
+      if (!r) return;
+      if (r[symbol]) delete r[symbol];
+      if (!Object.keys(r).length) delete (window as any).__probe;
+      if (import.meta.env.DEV) {
         try {
           // eslint-disable-next-line no-console
           console.debug('[qa-probe] unmounted', { symbol });
@@ -1057,6 +1127,15 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       {chartError && (
         <div data-testid="chart-error" className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">
           {String(chartError)}
+        </div>
+      )}
+
+      {calendarError && (
+        <div
+          data-testid="calendar-error"
+          className="mt-2 rounded bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200"
+        >
+          Economic calendar unavailable: {calendarError}
         </div>
       )}
 

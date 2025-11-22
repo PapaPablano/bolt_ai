@@ -3,6 +3,11 @@ import type { IndicatorStylePrefs } from './indicator-styles';
 export type TF = '1Min' | '5Min' | '10Min' | '15Min' | '1Hour' | '4Hour' | '1Day';
 export type Range = '1M' | '3M' | '6M' | '1Y' | '2Y' | '5Y' | '10Y' | 'MAX';
 
+export type CalendarPrefs = {
+  countries: string[];
+  minImpact: 'low' | 'medium' | 'high';
+};
+
 export type TfPreset = {
   useSMA: boolean;
   smaPeriod: number;
@@ -48,6 +53,7 @@ export type ChartPrefs = {
   default_timeframe: TF;
   default_range: Range;
   presets: Record<TF, TfPreset>;
+  calendar: CalendarPrefs;
   kdjEnabled?: boolean;
   kdjPeriod?: number;
   kdjKSmooth?: number;
@@ -58,6 +64,10 @@ export type ChartPrefs = {
 
 export const DEFAULT_TF: TF = '1Hour';
 export const DEFAULT_RANGE: Range = '1Y';
+export const DEFAULT_CALENDAR_PREFS: CalendarPrefs = {
+  countries: ['US', 'EU', 'GB'],
+  minImpact: 'medium',
+};
 
 export const DEFAULT_PRESETS: Record<TF, TfPreset> = {
   '1Min': {

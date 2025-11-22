@@ -19,6 +19,7 @@ export async function fetchCalendar(params: {
   countries?: string[];
   minImpact?: 'low' | 'medium' | 'high';
   baseUrl?: string;
+  signal?: AbortSignal;
 }) {
   const base = params.baseUrl ?? (import.meta.env.VITE_API_BASE_URL ?? '/api');
   const qs = new URLSearchParams({
@@ -27,7 +28,7 @@ export async function fetchCalendar(params: {
   });
   if (params.countries?.length) qs.set('countries', params.countries.join(','));
   if (params.minImpact) qs.set('min_impact', params.minImpact);
-  const r = await fetch(`${base}/v1/calendar?${qs.toString()}`, { credentials: 'omit' });
+  const r = await fetch(`${base}/v1/calendar?${qs.toString()}`, { credentials: 'omit', signal: params.signal });
   if (!r.ok) throw new Error(`Calendar ${r.status}`);
   return (await r.json()) as EconEvent[];
 }

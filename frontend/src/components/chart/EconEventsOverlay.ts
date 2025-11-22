@@ -18,23 +18,30 @@ function nearestBarTime(bars: SeedBar[], ts: number): number | null {
   return Math.abs(snapped - ts) <= 6 * 3600 ? snapped : null;
 }
 
+/** Applies markers and returns the number actually rendered. */
 export function applyEventMarkers(
   series: ISeriesApi<'Candlestick'>,
   events: EconEvent[],
   bars: SeedBar[],
-) {
+  limit = 50,
+): number {
   const markers = events
-    .map((event) => {
-      const snapped = nearestBarTime(bars, event.ts);
-      if (snapped == null) return null;
-      const shape = event.impact === 'high' ? 'arrowDown' : event.impact === 'medium' ? 'circle' : 'square';
+    .map((e) => {
+      const t = nearestBarTime(bars, e.ts);
+      if (t == null) return null;
+      const shape =
+        e.impact === 'high' ? 'arrowDown' :
+        e.impact === 'medium' ? 'circle' : 'square';
       return {
-        time: snapped as unknown as number,
+        time: t as unknown as number,
         position: 'aboveBar' as const,
         shape,
-        text: (event.title ?? '').slice(0, 12),
+        text: (e.title ?? '').slice(0, 12),
       };
     })
-    .filter(Boolean) as Parameters<typeof series.setMarkers>[0];
-  series.setMarkers(markers);
+    .filter(Boolean) as Parameters<ISeriesApi<'Candlestick'>['setMarkers']>[0];
+
+  const limited = markers.sort((a, b) => (a.time as number) - (b.time as number)).slice(Math.max(0, markers.length - limit));
+  series.setMarkers(limited);
+  return limited.length;
 }

@@ -36,6 +36,8 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
   const [chartData, setChartData] = useState<BarData[]>([]);
   const [isLoadingChart, setIsLoadingChart] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
+  const forceChartRender =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mock') === '1';
   const announce = useAnnouncement();
   const { prefs, loading: prefsLoading } = useChartPrefs();
   const tf = prefs.default_timeframe;
@@ -204,12 +206,12 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           <div className="lg:col-span-2">
-            {isLoadingChart ? (
+            {chartData.length > 0 || forceChartRender ? (
+              <AdvancedCandleChart symbol={selectedSymbol} initialTf={tf} initialRange={range} height={600} />
+            ) : isLoadingChart ? (
               <div className="bg-slate-800/50 border border-slate-700 rounded-lg h-[600px] flex items-center justify-center">
                 <div className="text-slate-400">Loading chart...</div>
               </div>
-            ) : chartData.length > 0 ? (
-              <AdvancedCandleChart symbol={selectedSymbol} initialTf={tf} initialRange={range} height={600} />
             ) : (
               <div className="bg-slate-800/50 border border-slate-700 rounded-lg h-[600px] flex items-center justify-center">
                 <div className="text-slate-400">No chart data available</div>
