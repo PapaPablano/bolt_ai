@@ -15,8 +15,28 @@ type WaitForChartsResult = {
   symbol: string;
 } & ChartSnapshot;
 
+export type ProbeRange = { from: number; to: number };
+
+export type ProbeMetrics = {
+  fps: number;
+  logicalRange: ProbeRange | null;
+  secondsRange: ProbeRange | null;
+  dataRange: ProbeRange | null;
+};
+
 export function trackProbePage(page: Page) {
   trackedProbePages.add(page);
+}
+
+export async function hoverMainChart(page: Page): Promise<{ x: number; y: number; width: number; height: number }> {
+  const chart = page.getByTestId('chart-root');
+  await chart.hover();
+  const box = await chart.boundingBox();
+  if (!box) throw new Error('chart bounding box unavailable');
+  const centerX = box.x + box.width / 2;
+  const centerY = box.y + box.height / 2;
+  await page.mouse.move(centerX, centerY);
+  return box;
 }
 
 export function clearTrackedProbePages() {
@@ -293,6 +313,22 @@ export async function getVisibleRanges(page: Page, symbol?: string) {
       return {
         vis: entry.visibleLogicalRange ?? null,
         all: entry.dataLogicalRange ?? null,
+      };
+    },
+    { symbol: target },
+  );
+}
+
+export async function readProbeMetrics(page: Page, symbol?: string): Promise<ProbeMetrics> {
+  const target = resolveSymbol(symbol);
+  return page.evaluate<ProbeMetrics, { symbol: string }>(
+    ({ symbol: sym }) => {
+      const entry = (window as any).__probe?.[sym];
+      return {
+        fps: typeof entry?.fps === 'number' ? entry.fps : 0,
+        logicalRange: entry?.visibleLogicalRange ?? null,
+        secondsRange: entry?.visibleSecondsRange ?? null,
+        dataRange: entry?.dataLogicalRange ?? null,
       };
     },
     { symbol: target },

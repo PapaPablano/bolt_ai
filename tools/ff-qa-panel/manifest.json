@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Stock Whisperer QA Panel",
+  "version": "0.1.0",
+  "description": "DevTools panel for __probe and __probeBoot.",
+  "devtools_page": "devtools.html",
+  "permissions": [],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "sw-qa-panel@example.local",
+      "strict_min_version": "109.0"
+    }
+  }
+}

@@ -54,6 +54,7 @@ const SESSION_MS = CLOSE_OFFSET_MS - OPEN_OFFSET_MS;
 const CALENDAR_DEBOUNCE_MS = 200;
 // MACD spacing is idempotent: targets stay stable regardless of zoom history.
 const MACD_SPACING_TARGETS: Record<'thin' | 'normal' | 'wide', number> = { thin: 5, normal: 7, wide: 9 };
+const WORKER_VISIBLE_POINT_CAP = 5000;
 const MINUTES_PER_TRADING_DAY = 390;
 const rangeToMinutes = (value: Range | string): number => {
   switch (value?.toUpperCase?.()) {
@@ -130,6 +131,13 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const macdLineRef = useRef<ISeriesApi<'Line'> | null>(null);
   const macdSigRef = useRef<ISeriesApi<'Line'> | null>(null);
   const macdHistRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const fpsTrackerRef = useRef<{ rafId: number; lastTs: number; accum: number; frames: number; fps: number }>({
+    rafId: 0,
+    lastTs: 0,
+    accum: 0,
+    frames: 0,
+    fps: 0,
+  });
 
   const lastTimeSecRef = useRef<number | null>(null);
   const lastBarRef = useRef<ChartBar | null>(null);
@@ -190,6 +198,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const auxPanelHeight = (preset.useMACD ? 180 : 0) + (preset.useRSI ? 140 : 0);
   const chartAreaHeight = Math.max(height - auxPanelHeight, 320);
   const lastVisibleRangeRef = useRef<{ from: number; to: number } | null>(null);
+  const initialWindowSentRef = useRef(false);
   const rangeThrottleRef = useRef<number | null>(null);
   const chartError = mockMode ? null : hist.error;
   const stageRef = useRef<BootStage>('none');
@@ -209,6 +218,35 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     },
     [qaProbeEnabled],
   );
+
+  useEffect(() => {
+    const tracker = fpsTrackerRef.current;
+    let mounted = true;
+    const loop = (ts: number) => {
+      if (!mounted) return;
+      if (tracker.lastTs === 0) tracker.lastTs = ts;
+      const delta = ts - tracker.lastTs;
+      tracker.lastTs = ts;
+      tracker.accum += delta;
+      tracker.frames += 1;
+      if (tracker.accum >= 500) {
+        tracker.fps = Math.round((tracker.frames / tracker.accum) * 1000);
+        tracker.accum = 0;
+        tracker.frames = 0;
+      }
+      tracker.rafId = requestAnimationFrame(loop);
+    };
+    tracker.rafId = requestAnimationFrame(loop);
+    return () => {
+      mounted = false;
+      if (tracker.rafId) cancelAnimationFrame(tracker.rafId);
+      tracker.rafId = 0;
+      tracker.lastTs = 0;
+      tracker.accum = 0;
+      tracker.frames = 0;
+      tracker.fps = 0;
+    };
+  }, []);
 
   useEffect(() => {
     if (!qaProbeEnabled) {
@@ -306,6 +344,15 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     },
   });
 
+  const pushWindowToWorker = useCallback(
+    (range: { from: number; to: number } | null, maxPoints = WORKER_VISIBLE_POINT_CAP) => {
+      if (!range) return;
+      lastVisibleRangeRef.current = range;
+      indicatorWorker.setWindow(range, maxPoints);
+    },
+    [indicatorWorker],
+  );
+
   const applyVisibleDecimation = useCallback(
     (range: { from: number; to: number } | null) => {
       const bars = seedBarsRef.current;
@@ -337,9 +384,10 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       });
       const payload = ds.length ? ds : bars;
       series.setData(mapBarsForChart(payload));
-      lastVisibleRangeRef.current = targetRange;
+      pushWindowToWorker(targetRange, WORKER_VISIBLE_POINT_CAP);
+      if (targetRange) initialWindowSentRef.current = true;
     },
-    [tf],
+    [indicatorWorker, pushWindowToWorker, tf],
   );
 
     const stPanelDefaults = useMemo(() => buildStPerfParams(preset), [preset]);
@@ -617,6 +665,21 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   }, [indicatorWorker, indicatorToggles, clearIndicatorSeries]);
 
   useEffect(() => {
+    initialWindowSentRef.current = false;
+  }, [symbol, tf]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || initialWindowSentRef.current) return;
+    const timeRange = chart.timeScale().getVisibleRange?.() as ChartTimeRange | null;
+    const seconds = toSecondsVisibleRange(timeRange);
+    if (seconds) {
+      pushWindowToWorker(seconds, WORKER_VISIBLE_POINT_CAP);
+      initialWindowSentRef.current = true;
+    }
+  }, [pushWindowToWorker, seedBarsVersion]);
+
+  useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
     const scale = chart.timeScale();
@@ -636,7 +699,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       }
       scale.unsubscribeVisibleTimeRangeChange(handler);
     };
-  }, [applyVisibleDecimation, range, symbol, tf]);
+  }, [applyVisibleDecimation, pushWindowToWorker, range, symbol, tf]);
 
   useLayoutEffect(() => {
     const container = mainRef.current;
@@ -1082,6 +1145,16 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
           return bars?.length ? { from: 0, to: bars.length - 1 } : null;
         },
       },
+      visibleSecondsRange: {
+        configurable: true,
+        enumerable: true,
+        get: () => (lastVisibleRangeRef.current ? { ...lastVisibleRangeRef.current } : null),
+      },
+      fps: {
+        configurable: true,
+        enumerable: true,
+        get: () => fpsTrackerRef.current?.fps ?? 0,
+      },
       setMacdThickness: {
         configurable: true,
         enumerable: true,
@@ -1092,6 +1165,41 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
             next.perIndicator.macdHist = { ...(next.perIndicator.macdHist ?? {}), histThickness: thickness };
             return next;
           });
+        },
+      },
+      panLogical: {
+        configurable: true,
+        enumerable: true,
+        value: (delta: number) => {
+          const chart = chartRef.current;
+          if (!chart || typeof delta !== 'number' || Number.isNaN(delta)) return null;
+          const scale = chart.timeScale();
+          const current = scale.getVisibleLogicalRange();
+          if (!current) return null;
+          const next = { from: current.from + delta, to: current.to + delta };
+          scale.setVisibleLogicalRange(next);
+          return next;
+        },
+      },
+      setVisibleLogicalRange: {
+        configurable: true,
+        enumerable: true,
+        value: (range: { from: number; to: number } | null) => {
+          const chart = chartRef.current;
+          if (!chart || !range) return null;
+          chart.timeScale().setVisibleLogicalRange(range);
+          return chart.timeScale().getVisibleLogicalRange();
+        },
+      },
+      setVisibleSecondsRange: {
+        configurable: true,
+        enumerable: true,
+        value: (bounds: { from: number; to: number } | null) => {
+          const chart = chartRef.current;
+          if (!chart || !bounds) return null;
+          const range = { from: toChartTime(bounds.from), to: toChartTime(bounds.to) };
+          chart.timeScale().setVisibleRange(range as any);
+          return bounds;
         },
       },
       econEventCount: {

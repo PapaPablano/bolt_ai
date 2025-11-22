@@ -8,22 +8,25 @@ import {
   type StPerfParams,
   type StPerfState,
 } from '@/utils/indicators-supertrend-perf';
+import { decimateLTTB, type XY } from '@/utils/lttb';
 
 type IndName = 'STAI' | 'EMA' | 'RSI' | 'VWAP' | 'BB' | 'MACD' | 'KDJ';
 type PaneName = 'kdj';
 
 type MsgInit = { type: 'INIT'; symbol: string; tf: string; stParams?: StPerfParams };
 
+type WindowBounds = { from: number; to: number } | null;
 type MsgSetHistory = { type: 'SET_HISTORY'; bars: Candle[] };
 type MsgLive = { type: 'LIVE_BAR'; bar: Candle; barClosed: boolean };
 type MsgToggle = { type: 'TOGGLE'; name: IndName; on: boolean };
+type MsgSetWindow = { type: 'SET_WINDOW'; bounds: WindowBounds; maxPoints?: number };
 type MsgSetParams =
   | { type: 'SET_PARAMS'; name: 'STAI'; params: Partial<StPerfParams> }
   | { type: 'SET_PARAMS'; name: 'BB'; params: Partial<BbParams> }
   | { type: 'SET_PARAMS'; name: 'MACD'; params: Partial<MacdParams> }
   | { type: 'SET_PARAMS'; name: 'VWAP'; params: Partial<VwapParams> }
   | { type: 'SET_PARAMS'; name: 'KDJ'; params: Partial<KdjParams> };
-type Incoming = MsgInit | MsgSetHistory | MsgLive | MsgToggle | MsgSetParams;
+type Incoming = MsgInit | MsgSetHistory | MsgLive | MsgToggle | MsgSetParams | MsgSetWindow;
 
 type CompactLine = [number, number];
 type CompactPoint = CompactLine;
@@ -106,6 +109,8 @@ type WorkerState = {
   vwapCommitTime?: number;
   bbCommitTime?: number;
   macdCommitTime?: number;
+  windowBounds: WindowBounds;
+  windowMaxPoints: number;
 };
 
 const EMA_SPAN = 20;
@@ -159,6 +164,8 @@ const state: WorkerState = {
   vwapCheckpoint: null,
   bbCheckpoint: null,
   macdCheckpoint: null,
+  windowBounds: null,
+  windowMaxPoints: 5000,
 };
 
 const encodeSeries = (series: LinePt[]): CompactLine[] => series.map((pt) => [pt.time, pt.value]);
@@ -177,6 +184,84 @@ const encodeMultiPoint = (points: Record<string, LinePt | CompactPoint>): MultiP
     out[key] = Array.isArray(val) ? (val as CompactPoint) : encodePoint(val as LinePt);
   });
   return out;
+};
+
+const windowsEqual = (a: WindowBounds, b: WindowBounds) => {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return a.from === b.from && a.to === b.to;
+};
+
+const normalizeBounds = (bounds: WindowBounds): WindowBounds => {
+  if (!bounds) return null;
+  if (!Number.isFinite(bounds.from) || !Number.isFinite(bounds.to)) return null;
+  const from = Math.min(bounds.from, bounds.to);
+  const to = Math.max(bounds.from, bounds.to);
+  if (from === to) return null;
+  return { from: Math.floor(from), to: Math.floor(to) };
+};
+
+const isTimeInWindow = (time: number) => {
+  const bounds = state.windowBounds;
+  if (!bounds) return true;
+  return time >= bounds.from && time <= bounds.to;
+};
+
+const decimateSeries = (series: LinePt[], maxPoints: number): LinePt[] => {
+  if (!Number.isFinite(maxPoints) || maxPoints < 3 || series.length <= maxPoints) return series;
+  const sampled = decimateLTTB(
+    series.map(({ time, value }) => ({ time, value } as XY)),
+    Math.max(3, Math.floor(maxPoints)),
+    'time',
+    'value',
+  );
+  return sampled.map(({ time, value }) => ({ time, value }));
+};
+
+const filterSeriesByWindow = (series: LinePt[]): LinePt[] => {
+  const bounds = state.windowBounds;
+  if (!bounds) return series;
+  const within = series.filter((pt) => pt.time >= bounds.from && pt.time <= bounds.to);
+  if (!within.length) return [];
+  return decimateSeries(within, state.windowMaxPoints);
+};
+
+const filterMultiSeriesByWindow = (series: Record<string, LinePt[]>): Record<string, LinePt[]> => {
+  const out: Record<string, LinePt[]> = {};
+  Object.keys(series).forEach((key) => {
+    out[key] = filterSeriesByWindow(series[key] ?? []);
+  });
+  return out;
+};
+
+const filterMultiPointsByWindow = (points: Record<string, LinePt>): Record<string, LinePt> => {
+  const out: Record<string, LinePt> = {};
+  Object.keys(points).forEach((key) => {
+    const pt = points[key];
+    if (pt && isTimeInWindow(pt.time)) out[key] = pt;
+  });
+  return out;
+};
+
+const postOverlayFullSeries = (name: IndName, series: LinePt[], aux?: Record<string, unknown>) => {
+  const filtered = filterSeriesByWindow(series);
+  post({ type: 'OVERLAY_FULL', name, series: encodeSeries(filtered), aux });
+};
+
+const postOverlayFullMulti = (name: IndName, series: Record<string, LinePt[]>) => {
+  const filtered = filterMultiSeriesByWindow(series);
+  post({ type: 'OVERLAY_FULL_MULTI', name, series: encodeMultiSeries(filtered) });
+};
+
+const postOverlayPatch = (name: IndName, point: LinePt) => {
+  if (!isTimeInWindow(point.time)) return;
+  post({ type: 'OVERLAY_PATCH', name, point: encodePoint(point) });
+};
+
+const postOverlayPatchMulti = (name: IndName, points: Record<string, LinePt>) => {
+  const filtered = filterMultiPointsByWindow(points);
+  if (!Object.keys(filtered).length) return;
+  post({ type: 'OVERLAY_PATCH_MULTI', name, point: encodeMultiPoint(filtered) });
 };
 
 const sortAndDedupeBars = (bars: Candle[]) => {
@@ -330,17 +415,28 @@ const computeKdjSeries = (
 
 const postKdjFull = (series: KdjSeries) => {
   if (!series) return;
-  post({ type: 'PANE_FULL', key: 'kdj', k: encodeSeries(series.k), d: encodeSeries(series.d), j: encodeSeries(series.j) });
+  post({
+    type: 'PANE_FULL',
+    key: 'kdj',
+    k: encodeSeries(filterSeriesByWindow(series.k)),
+    d: encodeSeries(filterSeriesByWindow(series.d)),
+    j: encodeSeries(filterSeriesByWindow(series.j)),
+  });
 };
 
 const postKdjPatch = (series?: Partial<KdjSeries> | null) => {
   if (!series) return;
+  const filteredK = series.k ? filterSeriesByWindow(series.k) : undefined;
+  const filteredD = series.d ? filterSeriesByWindow(series.d) : undefined;
+  const filteredJ = series.j ? filterSeriesByWindow(series.j) : undefined;
+  const hasPayload = (filteredK?.length ?? 0) > 0 || (filteredD?.length ?? 0) > 0 || (filteredJ?.length ?? 0) > 0;
+  if (!hasPayload) return;
   post({
     type: 'PANE_PATCH',
     key: 'kdj',
-    k: series.k ? encodeLines(series.k) : undefined,
-    d: series.d ? encodeLines(series.d) : undefined,
-    j: series.j ? encodeLines(series.j) : undefined,
+    k: filteredK ? encodeLines(filteredK) : undefined,
+    d: filteredD ? encodeLines(filteredD) : undefined,
+    j: filteredJ ? encodeLines(filteredJ) : undefined,
   });
 };
 
@@ -467,7 +563,7 @@ const computeAll = () => {
   if (state.stOn) {
     const batch = supertrendPerfSeries(state.hist, state.stParams);
     const line = batch.ama ?? batch.raw;
-    post({ type: 'OVERLAY_FULL', name: 'STAI', series: encodeSeries(line), aux: { factor: batch.factor } });
+    postOverlayFullSeries('STAI', line, { factor: batch.factor });
     if (batch.signals.length) post({ type: 'SIGNALS', name: 'STAI', signals: batch.signals });
     state.stState = {
       factor: batch.factor,
@@ -485,7 +581,7 @@ const computeAll = () => {
     const emaSt = initEmaState(EMA_SPAN);
     const series = state.hist.map((bar) => ({ time: bar.time, value: stepEma(emaSt, bar.close) }));
     state.emaState = emaSt;
-    post({ type: 'OVERLAY_FULL', name: 'EMA', series: encodeSeries(series) });
+    postOverlayFullSeries('EMA', series);
   } else {
     state.emaState = null;
   }
@@ -494,7 +590,7 @@ const computeAll = () => {
     const rsiSt = initRsiState(RSI_SPAN);
     const series = state.hist.map((bar) => ({ time: bar.time, value: stepRsi(rsiSt, bar.close) }));
     state.rsiState = rsiSt;
-    post({ type: 'OVERLAY_FULL', name: 'RSI', series: encodeSeries(series) });
+    postOverlayFullSeries('RSI', series);
   } else {
     state.rsiState = null;
   }
@@ -507,7 +603,7 @@ const computeAll = () => {
       series.push({ time: bar.time, value });
     }
     state.vwapState = vwapSt;
-    post({ type: 'OVERLAY_FULL', name: 'VWAP', series: encodeSeries(series) });
+    postOverlayFullSeries('VWAP', series);
   } else {
     state.vwapState = null;
   }
@@ -525,7 +621,7 @@ const computeAll = () => {
       lo.push({ time: bar.time, value: mean - offset });
     }
     state.bbState = bbSt;
-    post({ type: 'OVERLAY_FULL_MULTI', name: 'BB', series: encodeMultiSeries({ mid, up, lo }) });
+    postOverlayFullMulti('BB', { mid, up, lo });
   } else {
     state.bbState = null;
   }
@@ -542,7 +638,7 @@ const computeAll = () => {
       hist.push({ time: bar.time, value: next.hist });
     }
     state.macdState = macdSt;
-    post({ type: 'OVERLAY_FULL_MULTI', name: 'MACD', series: encodeMultiSeries({ macd, signal, hist }) });
+    postOverlayFullMulti('MACD', { macd, signal, hist });
   } else {
     state.macdState = null;
   }
@@ -635,7 +731,7 @@ const onLiveBar = (bar: Candle, barClosed: boolean) => {
     const before = state.stState ? { ...state.stState } : null;
     const { state: stState, raw, ama, signal } = supertrendPerfStep(state.stState, state.hist, bar, state.stParams, barClosed);
     const pt = ama ?? raw;
-    post({ type: 'OVERLAY_PATCH', name: 'STAI', point: encodePoint(pt) });
+    postOverlayPatch('STAI', pt);
     if (signal) post({ type: 'SIGNALS', name: 'STAI', signals: [signal] });
     if (barClosed) {
       state.stCheckpoint = before;
@@ -650,7 +746,7 @@ const onLiveBar = (bar: Candle, barClosed: boolean) => {
     const before = cloneEmaState(state.emaState, EMA_SPAN);
     const preview = cloneEmaState(state.emaState, EMA_SPAN);
     const next = stepEma(preview, bar.close);
-    post({ type: 'OVERLAY_PATCH', name: 'EMA', point: [bar.time, next] });
+    postOverlayPatch('EMA', { time: bar.time, value: next });
     if (barClosed) {
       state.emaCheckpoint = before;
       state.emaState = preview;
@@ -662,7 +758,7 @@ const onLiveBar = (bar: Candle, barClosed: boolean) => {
     const before = cloneRsiState(state.rsiState, RSI_SPAN);
     const preview = cloneRsiState(state.rsiState, RSI_SPAN);
     const value = stepRsi(preview, bar.close);
-    post({ type: 'OVERLAY_PATCH', name: 'RSI', point: [bar.time, value] });
+    postOverlayPatch('RSI', { time: bar.time, value });
     if (barClosed) {
       state.rsiCheckpoint = before;
       state.rsiState = preview;
@@ -674,7 +770,7 @@ const onLiveBar = (bar: Candle, barClosed: boolean) => {
     const before = cloneVwapState(state.vwapState);
     const preview = cloneVwapState(state.vwapState);
     const value = stepVwap(preview, bar);
-    post({ type: 'OVERLAY_PATCH', name: 'VWAP', point: [bar.time, value] });
+    postOverlayPatch('VWAP', { time: bar.time, value });
     if (barClosed) {
       state.vwapCheckpoint = before;
       state.vwapState = preview;
@@ -687,14 +783,10 @@ const onLiveBar = (bar: Candle, barClosed: boolean) => {
     const preview = cloneRollingStats(state.bbState, state.bbParams.period);
     const { mean, sigma } = pushRollingStats(preview, bar.close);
     const offset = state.bbParams.mult * sigma;
-    post({
-      type: 'OVERLAY_PATCH_MULTI',
-      name: 'BB',
-      point: encodeMultiPoint({
-        mid: [bar.time, mean],
-        up: [bar.time, mean + offset],
-        lo: [bar.time, mean - offset],
-      }),
+    postOverlayPatchMulti('BB', {
+      mid: { time: bar.time, value: mean },
+      up: { time: bar.time, value: mean + offset },
+      lo: { time: bar.time, value: mean - offset },
     });
     if (barClosed) {
       state.bbCheckpoint = before;
@@ -707,14 +799,10 @@ const onLiveBar = (bar: Candle, barClosed: boolean) => {
     const before = cloneMacdState(state.macdState, state.macdParams);
     const preview = cloneMacdState(state.macdState, state.macdParams);
     const next = stepMacd(preview, bar.close);
-    post({
-      type: 'OVERLAY_PATCH_MULTI',
-      name: 'MACD',
-      point: encodeMultiPoint({
-        macd: [bar.time, next.macd],
-        signal: [bar.time, next.signal],
-        hist: [bar.time, next.hist],
-      }),
+    postOverlayPatchMulti('MACD', {
+      macd: { time: bar.time, value: next.macd },
+      signal: { time: bar.time, value: next.signal },
+      hist: { time: bar.time, value: next.hist },
     });
     if (barClosed) {
       state.macdCheckpoint = before;
@@ -790,6 +878,16 @@ ctx.addEventListener('message', (event: MessageEvent<Incoming>) => {
       if (msg.name === 'KDJ') state.kdjParams = { ...state.kdjParams, ...msg.params } as KdjParams;
       computeAll();
       break;
+    case 'SET_WINDOW': {
+      const nextBounds = normalizeBounds(msg.bounds ?? null);
+      const nextMax = Number.isFinite(msg.maxPoints) ? Math.max(200, Math.floor(msg.maxPoints ?? state.windowMaxPoints)) : state.windowMaxPoints;
+      const boundsChanged = !windowsEqual(state.windowBounds, nextBounds);
+      const maxChanged = nextMax !== state.windowMaxPoints;
+      state.windowBounds = nextBounds;
+      state.windowMaxPoints = nextMax;
+      if (boundsChanged || maxChanged) computeAll();
+      break;
+    }
     default:
       break;
   }

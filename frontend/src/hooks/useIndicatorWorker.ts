@@ -26,6 +26,7 @@ type CompactPoint = [number, number];
 type CompactMultiSeries = Record<string, CompactSeries>;
 type CompactMultiPoint = Record<string, CompactPoint>;
 type CompactPaneSeries = [number, number][];
+type WindowBounds = { from: number; to: number } | null;
 
 type WorkerMessage =
   | { type: 'OVERLAY_FULL'; name: string; series: CompactSeries; aux?: Record<string, unknown> }
@@ -134,6 +135,9 @@ export function useIndicatorWorker(symbol: string, tf: string, opts: UseIndicato
     const liveBar = (bar: Candle, barClosed: boolean) => {
       post({ type: 'LIVE_BAR', bar, barClosed });
     };
+    const setWindow = (bounds: WindowBounds, maxPoints = 5000) => {
+      post({ type: 'SET_WINDOW', bounds, maxPoints });
+    };
     const toggle = (name: 'STAI' | 'EMA' | 'RSI' | 'VWAP' | 'BB' | 'MACD', on: boolean) => {
       post({ type: 'TOGGLE', name, on });
     };
@@ -155,7 +159,18 @@ export function useIndicatorWorker(symbol: string, tf: string, opts: UseIndicato
     const setKdjParams = (params: Partial<{ enabled: boolean; period: number; kSmooth: number; dSmooth: number; sessionAnchored: boolean }>) => {
       post({ type: 'SET_PARAMS', name: 'KDJ', params });
     };
-    return { setHistory, liveBar, toggle, setStParams, setBbParams, setMacdParams, setVwapParams, toggleKdj, setKdjParams };
+    return {
+      setHistory,
+      liveBar,
+      setWindow,
+      toggle,
+      setStParams,
+      setBbParams,
+      setMacdParams,
+      setVwapParams,
+      toggleKdj,
+      setKdjParams,
+    };
   }, []);
 
   return api;
