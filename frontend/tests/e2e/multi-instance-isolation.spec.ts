@@ -27,12 +27,12 @@ const waitForMacdProbe = async (page: Page, symbol: string) => {
 test('indicator toggles and probe mutations stay isolated per chart', async ({ page, context }) => {
   await resetClientState(page);
   await page.goto(urlFor(SYMBOL_A));
-  await waitForCharts(page, { symbol: SYMBOL_A });
+  const snapA = await waitForCharts(page, { symbol: SYMBOL_A });
 
   const secondary = await context.newPage();
   await resetClientState(secondary);
   await secondary.goto(urlFor(SYMBOL_B));
-  await waitForCharts(secondary, { symbol: SYMBOL_B });
+  const snapB = await waitForCharts(secondary, { symbol: SYMBOL_B });
 
   await ensureToggleState(page, 'toggle-macd', true);
   await ensureToggleState(page, 'toggle-kdj', true);
@@ -42,8 +42,8 @@ test('indicator toggles and probe mutations stay isolated per chart', async ({ p
   await waitForMacdProbe(page, SYMBOL_A);
   await waitForMacdProbe(secondary, SYMBOL_B);
 
-  const baselineSeriesA = await getSeriesCount(page, SYMBOL_A);
-  const baselineSeriesB = await getSeriesCount(secondary, SYMBOL_B);
+  const baselineSeriesA = snapA.seriesCount ?? (await getSeriesCount(page, SYMBOL_A));
+  const baselineSeriesB = snapB.seriesCount ?? (await getSeriesCount(secondary, SYMBOL_B));
   const baselineSpacingB = await getMacdSpacing(secondary, SYMBOL_B);
   expect(baselineSpacingB).not.toBeNull();
 

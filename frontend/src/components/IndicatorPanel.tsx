@@ -28,6 +28,7 @@ type Props = {
     kdj: KdjPanelParams;
   };
   toggles: Record<IndToggle, boolean>;
+  calendarToggleAllowed?: boolean;
   onToggle: (name: IndToggle, on: boolean) => void;
   onSetStParams: (params: Partial<StPerfParams>) => void;
   onSetBbParams: (params: Partial<{ period: number; mult: number }>) => void;
@@ -41,6 +42,7 @@ type Props = {
 export function IndicatorPanel({
   initial,
   toggles,
+  calendarToggleAllowed = false,
   onToggle,
   onSetStParams,
   onSetBbParams,
@@ -209,11 +211,15 @@ export function IndicatorPanel({
       </div>
 
       <div className="flex items-center justify-between">
-        <span className="text-sm">Economic Calendar</span>
+        <div className="text-sm flex flex-col">
+          <span>Economic Calendar</span>
+          {!calendarToggleAllowed && <span className="text-xs text-slate-500">Disabled in this build</span>}
+        </div>
         <Switch
           data-testid="toggle-calendar"
           checked={!!toggles.Calendar}
           onCheckedChange={(checked) => onToggle('Calendar', checked)}
+          disabled={!calendarToggleAllowed}
         />
       </div>
 

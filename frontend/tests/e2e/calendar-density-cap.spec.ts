@@ -28,7 +28,8 @@ test('Economic calendar overlay enforces density cap (<= 50)', async ({ page }) 
   });
 
   await gotoChart(page, { symbol: 'AAPL', mock: true, seed: 1337 });
-  await waitForCharts(page, { symbol: 'AAPL' });
+  const snap = await waitForCharts(page, { symbol: 'AAPL', timeoutMs: 15_000, seriesGateMs: 15_000 });
+  expect(snap.seriesCount ?? 0).toBeGreaterThan(0);
 
   const toggle = page.getByTestId('toggle-calendar');
   await toggle.click();

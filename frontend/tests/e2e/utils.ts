@@ -1,9 +1,19 @@
-import { Page } from '@playwright/test';
+import { test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 export const TEST_SYMBOL = 'AAPL';
 
 const resolveSymbol = (symbol?: string) => (symbol ?? TEST_SYMBOL).toUpperCase();
 const trackedProbePages = new Set<Page>();
+
+type ChartSnapshot = {
+  stage: string | null;
+  seriesCount: number | null;
+};
+
+type WaitForChartsResult = {
+  symbol: string;
+} & ChartSnapshot;
 
 export function trackProbePage(page: Page) {
   trackedProbePages.add(page);
@@ -12,6 +22,10 @@ export function trackProbePage(page: Page) {
 export function clearTrackedProbePages() {
   trackedProbePages.clear();
 }
+
+test.afterAll(() => {
+  clearTrackedProbePages();
+});
 
 export async function resetClientState(page: Page) {
   await page.addInitScript(() => {
@@ -75,47 +89,121 @@ export async function waitForProbe(page: Page, timeoutMs = 15_000) {
   );
 }
 
-export async function waitForCharts(page: Page, opts: { symbol?: string; timeoutMs?: number } = {}) {
-  const symbol = opts.symbol ? resolveSymbol(opts.symbol) : undefined;
+export async function waitForCharts(
+  page: Page,
+  opts: {
+    symbol?: string;
+    timeoutMs?: number;
+    pollMs?: number;
+    /** If false, skip waiting for seriesCount>0 and only gate on boot stages. */
+    requireSeries?: boolean;
+    /** Override for the seriesCount gate timeout; defaults to timeoutMs. */
+    seriesGateMs?: number;
+    /** Minimum series count to consider ready; defaults to 1. */
+    minSeries?: number;
+  } = {},
+): Promise<WaitForChartsResult> {
   const timeoutMs = opts.timeoutMs ?? 15_000;
+  const pollMs = opts.pollMs ?? 100;
+  const requireSeries = opts.requireSeries ?? true;
+  const seriesGateMs = opts.seriesGateMs ?? timeoutMs;
+  const minSeries = opts.minSeries ?? 1;
+
   await waitForProbe(page, timeoutMs);
 
-  const stageTimeout = timeoutMs;
+  const preferredSymbol = opts.symbol ? resolveSymbol(opts.symbol) : undefined;
+  const symbol = await resolveChartSymbol(page, preferredSymbol);
+
+  // 1) Wait for deterministic boot stages scoped to the symbol
   try {
     await page.waitForFunction(
-      ({ symbol: sym }: { symbol?: string }) => {
-        const root = (window as any).__probe;
-        if (!root) return false;
-        const key = sym ?? Object.keys(root)[0];
-        if (!key) return false;
-        const stage = root[key]?.bootStage ?? 'none';
-        return stage === 'candle-series-created' || stage === 'seed-bars-ready';
+      ({ sym }: { sym: string }) => {
+        const entry = (window as any).__probe?.[sym];
+        if (!entry) return false;
+        const bootStage = entry.bootStage ?? null;
+        return bootStage === 'candle-series-created' || bootStage === 'seed-bars-ready';
       },
-      { symbol },
-      { polling: 100, timeout: stageTimeout },
+      { sym: symbol },
+      { polling: pollMs, timeout: timeoutMs },
     );
   } catch (error) {
     await debugProbe(page, 'waitForCharts-stage');
     throw error;
   }
 
-  try {
-    await page.waitForFunction(
-      ({ symbol: sym }: { symbol?: string }) => {
-        const root = (window as any).__probe;
-        if (!root) return false;
-        const key = sym ?? Object.keys(root)[0];
-        if (!key) return false;
-        const count = root[key]?.seriesCount ?? null;
-        return typeof count === 'number' && count > 0;
-      },
-      { symbol },
-      { polling: 100, timeout: Math.min(5_000, timeoutMs) },
-    );
-  } catch (error) {
-    await debugProbe(page, 'waitForCharts-series');
-    throw error;
+  // 2) Optionally wait for seriesCount>=minSeries
+  if (requireSeries) {
+    try {
+      await page.waitForFunction(
+        ({ sym, min }: { sym: string; min: number }) => {
+          const entry = (window as any).__probe?.[sym];
+          if (!entry) return false;
+          const count = entry.seriesCount;
+          return typeof count === 'number' && count >= min;
+        },
+        { sym: symbol, min: minSeries },
+        { polling: pollMs, timeout: seriesGateMs },
+      );
+    } catch (error) {
+      await debugProbe(page, 'waitForCharts-series');
+      throw error;
+    }
   }
+
+  const snapshot = await readChartSnapshot(page, symbol);
+  return { symbol, ...snapshot };
+}
+
+async function resolveChartSymbol(page: Page, preferred?: string): Promise<string> {
+  const result = await page.evaluate<
+    { symbol: string | null; namespaces: string[] },
+    { prefer?: string }
+  >(
+    ({ prefer }) => {
+      const w = window as any;
+      const root = w.__probe ?? {};
+      const namespaces = Object.keys(root);
+      if (prefer) {
+        return { symbol: root[prefer] ? prefer : null, namespaces };
+      }
+      const mounted = Array.isArray(w.__probeBoot?.mounted) ? w.__probeBoot.mounted : [];
+      const mountedSymbol = mounted[0]?.symbol;
+      if (mountedSymbol && root[mountedSymbol]) {
+        return { symbol: mountedSymbol, namespaces };
+      }
+      if (namespaces.length === 1) {
+        return { symbol: namespaces[0], namespaces };
+      }
+      return { symbol: null, namespaces };
+    },
+    { prefer: preferred },
+  );
+
+  if (result.symbol) return result.symbol;
+
+  await debugProbe(page, 'waitForCharts-no-symbol');
+  const namespaceList = result.namespaces.length ? result.namespaces.join(', ') : 'none';
+  if (preferred) {
+    throw new Error(
+      `waitForCharts: symbol "${preferred}" not found in probe namespaces (${namespaceList}).`,
+    );
+  }
+  throw new Error(
+    `waitForCharts: could not resolve target symbol automatically (namespaces: ${namespaceList}). Pass opts.symbol.`,
+  );
+}
+
+async function readChartSnapshot(page: Page, symbol: string): Promise<ChartSnapshot> {
+  return page.evaluate<ChartSnapshot, { sym: string }>(
+    ({ sym }) => {
+      const entry = (window as any).__probe?.[sym];
+      return {
+        stage: entry?.bootStage ?? null,
+        seriesCount: typeof entry?.seriesCount === 'number' ? entry.seriesCount : null,
+      };
+    },
+    { sym: symbol },
+  );
 }
 
 export async function probeKeys(page: Page) {

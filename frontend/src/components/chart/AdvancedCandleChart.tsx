@@ -4,6 +4,7 @@ import type { BusinessDay, CandlestickData, HistogramData, ISeriesApi, Time, UTC
 import { DEFAULT_CALENDAR_PREFS, type TF, type Range, type TfPreset } from '@/types/prefs';
 import type { Bar as ApiBar } from '@/types/bars';
 import { useChartPrefs } from '@/hooks/useChartPrefs';
+import { env } from '@/env';
 import type { IndicatorStylePrefs } from '@/types/indicator-styles';
 import { cloneIndicatorStylePrefs } from '@/types/indicator-styles';
 import { useHistoricalBars } from '@/hooks/useHistoricalBars';
@@ -267,6 +268,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const [kdjD, setKdjD] = useState<WorkerLinePt[]>([]);
   const [kdjJ, setKdjJ] = useState<WorkerLinePt[]>([]);
 
+  const calendarBaseline = env.CALENDAR_ENABLED && !!preset.useCalendar;
   const indicatorToggles = useMemo<Record<PanelIndicatorName, boolean>>(
     () => ({
       STAI: !!preset.useSTPerf,
@@ -276,20 +278,11 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       BB: !!preset.useBB,
       MACD: !!preset.useMACD,
       KDJ: !!preset.useKDJ,
-      Calendar: !!preset.useCalendar,
+      Calendar: calendarBaseline,
     }),
-    [
-      preset.useSTPerf,
-      preset.useEMA,
-      preset.useRSI,
-      preset.useVWAP,
-      preset.useBB,
-      preset.useMACD,
-      preset.useKDJ,
-      preset.useCalendar,
-    ],
+    [preset.useSTPerf, preset.useEMA, preset.useRSI, preset.useVWAP, preset.useBB, preset.useMACD, preset.useKDJ, calendarBaseline],
   );
-  const calendarEnabled = indicatorToggles.Calendar || !!preset.useCalendar;
+  const calendarEnabled = indicatorToggles.Calendar && env.CALENDAR_ENABLED;
 
   const indicatorWorker = useIndicatorWorker(symbol, tf, {
     onOverlayFull: handleWorkerOverlayFull,
@@ -520,6 +513,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const handleIndicatorToggle = useCallback(
     (name: PanelIndicatorName, on: boolean) => {
       if (name === 'Calendar') {
+        if (!env.CALENDAR_ENABLED) return;
         updateTfPreset(tf, { useCalendar: on });
         return;
       }
@@ -1195,6 +1189,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       <IndicatorPanel
         initial={indicatorPanelInitials}
         toggles={indicatorToggles}
+        calendarToggleAllowed={env.CALENDAR_ENABLED}
         onToggle={handleIndicatorToggle}
         onSetStParams={handleStParamChange}
         onSetBbParams={handleBbParamChange}

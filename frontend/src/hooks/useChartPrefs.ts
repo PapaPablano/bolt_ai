@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabaseClient';
 import type { ChartPrefs, TF, Range, TfPreset } from '@/types/prefs';
 import { DEFAULT_CALENDAR_PREFS, DEFAULT_PRESETS, DEFAULT_RANGE, DEFAULT_TF } from '@/types/prefs';
 import { DEFAULT_INDICATOR_STYLE_PREFS, cloneIndicatorStylePrefs, type IndicatorStylePrefs } from '@/types/indicator-styles';
+import { env } from '@/env';
 
 const LS_KEY = 'chart_prefs_v2';
 const LEGACY_KEYS = ['chart_prefs_v1'];
@@ -15,9 +16,15 @@ const ensureStyles = (styles?: IndicatorStylePrefs): IndicatorStylePrefs => ({
   perIndicator: styles?.perIndicator ?? {},
 });
 
+const deriveCalendarToggle = (value?: boolean) => {
+  if (!env.CALENDAR_ENABLED) return false;
+  return typeof value === 'boolean' ? value : env.CALENDAR_ENABLED;
+};
+
 const mergeDefaults = (p?: Partial<ChartPrefs>): ChartPrefs => {
   const presets = (Object.keys(DEFAULT_PRESETS) as TF[]).reduce<Record<TF, TfPreset>>((acc, tf) => {
-    acc[tf] = { ...DEFAULT_PRESETS[tf], ...(p?.presets?.[tf] ?? {}) };
+    const merged = { ...DEFAULT_PRESETS[tf], ...(p?.presets?.[tf] ?? {}) };
+    acc[tf] = { ...merged, useCalendar: deriveCalendarToggle(merged.useCalendar) };
     return acc;
   }, {} as Record<TF, TfPreset>);
 

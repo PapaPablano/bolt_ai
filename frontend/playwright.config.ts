@@ -1,5 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const chromiumArgs = [
+  '--disable-renderer-backgrounding',
+  '--disable-background-timer-throttling',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-features=CalculateNativeWinOcclusion',
+  '--mute-audio',
+];
+
 export default defineConfig({
   testDir: 'tests/e2e',
   fullyParallel: true,
@@ -12,6 +20,7 @@ export default defineConfig({
     video: 'retain-on-failure',
     locale: 'en-US',
     colorScheme: 'dark',
+    launchOptions: { args: chromiumArgs },
   },
   projects: [
     {
@@ -35,6 +44,7 @@ export default defineConfig({
         VITE_DEFAULT_SYMBOL: 'AAPL',
         VITE_API_URL: process.env.VITE_API_URL ?? 'http://localhost:8000',
         VITE_WS_URL: process.env.VITE_WS_URL ?? 'ws://localhost:8000/ws',
+        VITE_CALENDAR_ENABLED: process.env.VITE_CALENDAR_ENABLED ?? '1',
       },
     },
     {
@@ -48,6 +58,7 @@ export default defineConfig({
         VITE_DEFAULT_SYMBOL: 'AAPL',
         VITE_API_URL: process.env.VITE_API_URL ?? 'http://localhost:8000',
         VITE_WS_URL: process.env.VITE_WS_URL ?? 'ws://localhost:8000/ws',
+        VITE_CALENDAR_ENABLED: process.env.VITE_CALENDAR_ENABLED ?? '1',
       },
     },
   ],

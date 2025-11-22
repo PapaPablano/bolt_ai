@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { gotoChart, waitForCharts, resetClientState, debugTrackedProbePages, clearTrackedProbePages } from './utils';
+import { gotoChart, waitForCharts, resetClientState, debugTrackedProbePages, clearTrackedProbePages, readProbeCounts } from './utils';
 
 test.afterEach(async ({ page }, testInfo) => {
   if (testInfo.status !== testInfo.expectedStatus) {
@@ -25,31 +25,14 @@ test('calendar toggle applies and clears markers (mocked)', async ({ page }) => 
   });
 
   await gotoChart(page, { symbol: 'AAPL', mock: true, seed: 1337 });
-  await waitForCharts(page, { symbol: 'AAPL' });
+  const snap = await waitForCharts(page, { symbol: 'AAPL', timeoutMs: 15_000, seriesGateMs: 15_000 });
+  expect(snap.seriesCount ?? 0).toBeGreaterThan(0);
 
   const toggle = page.getByTestId('toggle-calendar');
 
   await toggle.click();
-  await expect
-    .poll(async () =>
-      page.evaluate(() => {
-        const probe = (window as any).__probe ?? {};
-        const key = Object.keys(probe)[0];
-        if (!key) return 0;
-        return probe[key]?.econMarkerCount ?? 0;
-      }),
-    )
-    .toBeGreaterThan(0);
+  await expect.poll(async () => (await readProbeCounts(page, 'AAPL')).markers).toBeGreaterThan(0);
 
   await toggle.click();
-  await expect
-    .poll(async () =>
-      page.evaluate(() => {
-        const probe = (window as any).__probe ?? {};
-        const key = Object.keys(probe)[0];
-        if (!key) return 0;
-        return probe[key]?.econMarkerCount ?? 999;
-      }),
-    )
-    .toBe(0);
+  await expect.poll(async () => (await readProbeCounts(page, 'AAPL')).markers).toBe(0);
 });
