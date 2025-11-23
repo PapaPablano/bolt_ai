@@ -104,9 +104,21 @@ export async function gotoChart(
 }
 
 export async function waitForProbe(page: Page, timeoutMs = 15_000) {
-  try {
-    await page.waitForFunction(
-      () => {
+  const pollMs = 100;
+  const deadline = Date.now() + timeoutMs;
+
+  // Explicit polling loop instead of page.waitForFunction to avoid flakiness
+  // around navigation/step lifetimes in Playwright.
+  // "Ready" means either:
+  // - __probe has at least one namespace, OR
+  // - __probeBoot.stages contains 'seed-bars-ready', OR
+  // - __probeBoot exists at all (boot contract is wired; waitForCharts will
+  //   perform stricter, symbol-scoped checks).
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let ready = false;
+    try {
+      ready = await page.evaluate(() => {
         const w = window as any;
         const hasProbe = !!w.__probe && Object.keys(w.__probe).length > 0;
         const bootReady =
@@ -114,18 +126,25 @@ export async function waitForProbe(page: Page, timeoutMs = 15_000) {
           w.__probeBoot.stages.some((s: any) => s?.stage === 'seed-bars-ready');
         const bootPresent = !!w.__probeBoot;
         return hasProbe || bootReady || bootPresent;
-      },
-      undefined,
-      { timeout: timeoutMs, polling: 100 },
-    );
-  } catch (error) {
-    try {
-      // Best-effort probe snapshot to aid debugging when readiness never materializes.
-      await debugProbe(page, 'waitForProbe-timeout');
+      });
     } catch {
-      // ignore logging errors
+      // If the page navigated between polls, just retry until timeout.
+      ready = false;
     }
-    throw error;
+
+    if (ready) return;
+
+    if (Date.now() >= deadline) {
+      try {
+        // Best-effort probe snapshot to aid debugging when readiness never materializes.
+        await debugProbe(page, 'waitForProbe-timeout');
+      } catch {
+        // ignore logging errors
+      }
+      throw new Error(`waitForProbe: probe did not become ready within ${timeoutMs}ms`);
+    }
+
+    await page.waitForTimeout(pollMs);
   }
 }
 
@@ -155,38 +174,58 @@ export async function waitForCharts(
   const symbol = await resolveChartSymbol(page, preferredSymbol);
 
   // 1) Wait for deterministic boot stages scoped to the symbol
-  try {
-    await page.waitForFunction(
-      ({ sym }: { sym: string }) => {
-        const entry = (window as any).__probe?.[sym];
-        if (!entry) return false;
-        const bootStage = entry.bootStage ?? null;
-        return bootStage === 'candle-series-created' || bootStage === 'seed-bars-ready';
-      },
-      { sym: symbol },
-      { polling: pollMs, timeout: timeoutMs },
-    );
-  } catch (error) {
-    await debugProbe(page, 'waitForCharts-stage');
-    throw error;
+  {
+    const deadline = Date.now() + timeoutMs;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      let ready = false;
+      try {
+        ready = await page.evaluate(({ sym }: { sym: string }) => {
+          const entry = (window as any).__probe?.[sym];
+          if (!entry) return false;
+          const bootStage = entry.bootStage ?? null;
+          return bootStage === 'candle-series-created' || bootStage === 'seed-bars-ready';
+        }, { sym: symbol });
+      } catch {
+        ready = false;
+      }
+
+      if (ready) break;
+
+      if (Date.now() >= deadline) {
+        await debugProbe(page, 'waitForCharts-stage');
+        throw new Error(`waitForCharts: boot stage did not reach ready state within ${timeoutMs}ms`);
+      }
+
+      await page.waitForTimeout(pollMs);
+    }
   }
 
   // 2) Optionally wait for seriesCount>=minSeries
   if (requireSeries) {
-    try {
-      await page.waitForFunction(
-        ({ sym, min }: { sym: string; min: number }) => {
+    const deadline = Date.now() + seriesGateMs;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      let ready = false;
+      try {
+        ready = await page.evaluate(({ sym, min }: { sym: string; min: number }) => {
           const entry = (window as any).__probe?.[sym];
           if (!entry) return false;
           const count = entry.seriesCount;
           return typeof count === 'number' && count >= min;
-        },
-        { sym: symbol, min: minSeries },
-        { polling: pollMs, timeout: seriesGateMs },
-      );
-    } catch (error) {
-      await debugProbe(page, 'waitForCharts-series');
-      throw error;
+        }, { sym: symbol, min: minSeries });
+      } catch {
+        ready = false;
+      }
+
+      if (ready) break;
+
+      if (Date.now() >= deadline) {
+        await debugProbe(page, 'waitForCharts-series');
+        throw new Error(`waitForCharts: seriesCount did not reach >=${minSeries} within ${seriesGateMs}ms`);
+      }
+
+      await page.waitForTimeout(pollMs);
     }
   }
 
@@ -255,21 +294,32 @@ export async function readProbeBoot(page: Page) {
 }
 
 export async function debugProbe(page: Page, label = 'probe-debug') {
-  const info = await page.evaluate(() => {
-    const w = window as any;
-    const root = w.__probe ?? {};
-    const firstKey = Object.keys(root)[0];
-    const entry = firstKey ? root[firstKey] : undefined;
-    return {
-      hasProbe: !!w.__probe,
-      nsKeys: Object.keys(root),
-      stage: entry?.bootStage ?? null,
-      seriesCount: entry?.seriesCount ?? null,
-      boot: w.__probeBoot ?? null,
-    };
-  });
-  // eslint-disable-next-line no-console
-  console.log(`[${label}]`, JSON.stringify(info));
+  try {
+    if (typeof page.isClosed === 'function' && page.isClosed()) {
+      // eslint-disable-next-line no-console
+      console.log(`[${label}] page is closed; skipping probe debug`);
+      return;
+    }
+
+    const info = await page.evaluate(() => {
+      const w = window as any;
+      const root = w.__probe ?? {};
+      const firstKey = Object.keys(root)[0];
+      const entry = firstKey ? root[firstKey] : undefined;
+      return {
+        hasProbe: !!w.__probe,
+        nsKeys: Object.keys(root),
+        stage: entry?.bootStage ?? null,
+        seriesCount: entry?.seriesCount ?? null,
+        boot: w.__probeBoot ?? null,
+      };
+    });
+    // eslint-disable-next-line no-console
+    console.log(`[${label}]`, JSON.stringify(info));
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error(`[${label}] failed to read probe`, error);
+  }
 }
 
 export async function debugTrackedProbePages(label = 'probe-debug') {

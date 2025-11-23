@@ -404,7 +404,7 @@
                 - generic [ref=e420]:
                   - generic [ref=e421]: benzinga
                   - generic [ref=e422]: 3h ago
-              - 'link "Weekend Round-Up: Nvidia''s Record Revenue, Apple''s F1 Rights, Google''s Gemini 3 And Meta''s AI Safety Measures From record-breaking revenues to broadcast rights and AI advancements, the tech stories were as diverse as they were impactful this week. benzinga 4h ago" [ref=e423] [cursor=pointer]':
+              - 'link "Weekend Round-Up: Nvidia''s Record Revenue, Apple''s F1 Rights, Google''s Gemini 3 And Meta''s AI Safety Measures From record-breaking revenues to broadcast rights and AI advancements, the tech stories were as diverse as they were impactful this week. benzinga 5h ago" [ref=e423] [cursor=pointer]':
                 - /url: https://www.benzinga.com/markets/tech/25/11/49022106/weekend-round-up-nvidias-record-revenue-apples-f1-rights-googles-gemini-3-and-metas-ai-safety-measures
                 - generic [ref=e424]:
                   - 'heading "Weekend Round-Up: Nvidia''s Record Revenue, Apple''s F1 Rights, Google''s Gemini 3 And Meta''s AI Safety Measures" [level=4] [ref=e425]'
@@ -412,7 +412,7 @@
                 - paragraph [ref=e430]: From record-breaking revenues to broadcast rights and AI advancements, the tech stories were as diverse as they were impactful this week.
                 - generic [ref=e431]:
                   - generic [ref=e432]: benzinga
-                  - generic [ref=e433]: 4h ago
+                  - generic [ref=e433]: 5h ago
               - 'link "iPhone Pocket, China Sales, $600 Million Patent Case And More: This Week In Appleverse Apple made headlines this weekend with a record-breaking TV drama, a viral new accessory, surging iPhone 17 sales in China, and a major $600 million patent ruling. benzinga 5h ago" [ref=e434] [cursor=pointer]':
                 - /url: https://www.benzinga.com/markets/tech/25/11/49022054/iphone-pocket-china-sales-600-million-patent-case-and-more-this-week-in-appleverse
                 - generic [ref=e435]:

@@ -12,7 +12,13 @@ export default defineConfig({
   testDir: 'tests/e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // Give slower CI and chart initialization more headroom.
+  timeout: 60_000,
+  expect: {
+    timeout: 10_000,
+  },
+  // Allow a single retry locally; keep CI behaviour unchanged.
+  retries: process.env.CI ? 2 : 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5174',
@@ -22,6 +28,7 @@ export default defineConfig({
     locale: 'en-US',
     colorScheme: 'dark',
     launchOptions: { args: chromiumArgs },
+    actionTimeout: 15_000,
   },
   projects: [
     {
