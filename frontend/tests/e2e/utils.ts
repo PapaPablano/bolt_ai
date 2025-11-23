@@ -1,10 +1,19 @@
 import { test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 
 export const TEST_SYMBOL = 'AAPL';
 
 const resolveSymbol = (symbol?: string) => (symbol ?? TEST_SYMBOL).toUpperCase();
 const trackedProbePages = new Set<Page>();
+
+export async function enableProbe(context: BrowserContext) {
+  await context.addInitScript(() => {
+    const w = window as any;
+    w.__QA_PROBE__ = '1';
+    delete w.__probe;
+    delete w.__probeBoot;
+  });
+}
 
 type ChartSnapshot = {
   stage: string | null;
@@ -76,12 +85,7 @@ export async function readProbeCounts(page: Page, symbol?: string) {
 }
 
 export async function prepareProbe(page: Page) {
-  await page.addInitScript(() => {
-    const w = window as any;
-    w.__QA_PROBE__ = '1';
-    delete w.__probe;
-    delete w.__probeBoot;
-  });
+  await enableProbe(page.context());
 }
 
 export async function gotoChart(
@@ -95,14 +99,19 @@ export async function gotoChart(
   qs.set('mock', mock ? '1' : '0');
   if (seed !== undefined) qs.set('seed', String(seed));
   if (mock && mockEnd) qs.set('mockEnd', String(mockEnd));
-  await page.goto(`/?${qs.toString()}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`/?${qs.toString()}`, { waitUntil: 'networkidle' });
+  await page.getByTestId('chart-root').waitFor({ state: 'visible' });
 }
 
 export async function waitForProbe(page: Page, timeoutMs = 15_000) {
   await page.waitForFunction(
     () => {
-      const root = (window as any).__probe;
-      return !!root && Object.keys(root).length > 0;
+      const w = window as any;
+      const hasProbe = !!w.__probe && Object.keys(w.__probe).length > 0;
+      const bootReady =
+        Array.isArray(w.__probeBoot?.stages) &&
+        w.__probeBoot.stages.some((s: any) => s?.stage === 'seed-bars-ready');
+      return hasProbe || bootReady;
     },
     undefined,
     { timeout: timeoutMs, polling: 100 },

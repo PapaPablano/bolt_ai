@@ -11,8 +11,8 @@ This note tracks the expectations around our chart probe metrics and how we pers
 ## Probe Metric Attachments
 
 - Each FPS spec run collects per-sample probe metrics plus a final snapshot from `window.__probe` via `page.evaluate`.
-- The JSON payload is attached with `test.info().attach('probe-metrics', ...)`, which Playwright stores alongside the HTML report under `playwright-report/`.
-- CI already uploads the entire `playwright-report/` directory as an artifact, so no extra work is required to persist these attachments.
+- The JSON payload is attached with `test.info().attach('probe-metrics', ...)`, which Playwright stores alongside the HTML report under `frontend/playwright-report/`.
+- The `frontend-ci` workflow already uploads `frontend/playwright-report` as an artifact (`.github/workflows/frontend-ci.yml`), so no extra CI changes are required to preserve these attachments.
 
 ## Reference Commands
 

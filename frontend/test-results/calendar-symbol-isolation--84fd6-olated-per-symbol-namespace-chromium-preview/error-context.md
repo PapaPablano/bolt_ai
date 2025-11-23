@@ -1,0 +1,425 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - generic:
+    - link "Skip to main content" [ref=e4] [cursor=pointer]:
+      - /url: "#main-content"
+    - link "Skip to watchlist" [ref=e5] [cursor=pointer]:
+      - /url: "#watchlist"
+    - link "Skip to chart" [ref=e6] [cursor=pointer]:
+      - /url: "#chart"
+    - link "Skip to news" [ref=e7] [cursor=pointer]:
+      - /url: "#news"
+  - banner [ref=e8]:
+    - generic [ref=e9]:
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - img [ref=e12]
+          - generic [ref=e14]:
+            - paragraph [ref=e15]: Stock Whisperer
+            - heading "Intelligent Market Navigation" [level=1] [ref=e16]
+        - navigation "Primary" [ref=e17]:
+          - link "Dashboard" [ref=e18] [cursor=pointer]:
+            - /url: /
+          - link "Watchlist" [ref=e19] [cursor=pointer]:
+            - /url: /watchlist
+          - link "Markets" [ref=e20] [cursor=pointer]:
+            - /url: /markets
+          - link "Compare" [ref=e21] [cursor=pointer]:
+            - /url: /compare
+          - link "Help" [ref=e22] [cursor=pointer]:
+            - /url: /help
+      - search "Global symbol search" [ref=e23]:
+        - search "Search stocks" [ref=e24]:
+          - generic [ref=e25]:
+            - img [ref=e26]
+            - generic [ref=e29]: Search for stocks by symbol or company name
+            - searchbox "Search for stocks by symbol or company name" [ref=e30]
+  - main [ref=e31]:
+    - region "Stock watchlist" [ref=e32]:
+      - heading "Watchlist" [level=2] [ref=e33]
+    - generic "Trending insights" [ref=e47]:
+      - region "Trending stocks" [ref=e48]:
+        - generic [ref=e49]:
+          - heading "Trending now" [level=2] [ref=e50]:
+            - img [ref=e51]
+            - text: Trending now
+          - link "Open screener" [ref=e53] [cursor=pointer]:
+            - /url: /screener
+        - list [ref=e54]:
+          - listitem [ref=e55]:
+            - generic [ref=e56]:
+              - link "View AAPL stock details" [ref=e57] [cursor=pointer]:
+                - /url: /stocks/AAPL
+                - text: AAPL
+              - paragraph [ref=e58]: Apple Inc.
+              - link "Technology sector →" [ref=e59] [cursor=pointer]:
+                - /url: /markets/sectors/technology
+            - button "Load chart" [ref=e60] [cursor=pointer]
+          - listitem [ref=e61]:
+            - generic [ref=e62]:
+              - link "View MSFT stock details" [ref=e63] [cursor=pointer]:
+                - /url: /stocks/MSFT
+                - text: MSFT
+              - paragraph [ref=e64]: Microsoft Corporation
+              - link "Technology sector →" [ref=e65] [cursor=pointer]:
+                - /url: /markets/sectors/technology
+            - button "Load chart" [ref=e66] [cursor=pointer]
+          - listitem [ref=e67]:
+            - generic [ref=e68]:
+              - link "View GOOGL stock details" [ref=e69] [cursor=pointer]:
+                - /url: /stocks/GOOGL
+                - text: GOOGL
+              - paragraph [ref=e70]: Alphabet Inc.
+              - link "Communication Services sector →" [ref=e71] [cursor=pointer]:
+                - /url: /markets/sectors/communication-services
+            - button "Load chart" [ref=e72] [cursor=pointer]
+          - listitem [ref=e73]:
+            - generic [ref=e74]:
+              - link "View AMZN stock details" [ref=e75] [cursor=pointer]:
+                - /url: /stocks/AMZN
+                - text: AMZN
+              - paragraph [ref=e76]: Amazon.com, Inc.
+              - link "Consumer Discretionary sector →" [ref=e77] [cursor=pointer]:
+                - /url: /markets/sectors/consumer-discretionary
+            - button "Load chart" [ref=e78] [cursor=pointer]
+    - region "Trading chart and analysis" [ref=e79]:
+      - generic [ref=e80]:
+        - generic [ref=e81]:
+          - heading "AAPL" [level=2] [ref=e82]
+          - paragraph [ref=e83]:
+            - text: "Sector:"
+            - link "Technology" [ref=e84] [cursor=pointer]:
+              - /url: /markets/sectors/technology
+        - generic [ref=e85]:
+          - button "Compare" [ref=e86] [cursor=pointer]:
+            - img [ref=e87]
+            - text: Compare
+          - link "Open comparison view for AAPL and related stocks" [ref=e92] [cursor=pointer]:
+            - /url: /compare?symbols=AAPL%2CMSFT%2CGOOGL%2CAMZN
+            - text: Open comparison page
+      - generic [ref=e93]:
+        - generic [ref=e95]:
+          - generic [ref=e96]:
+            - generic [ref=e97]:
+              - generic [ref=e98]:
+                - button "1m" [ref=e99] [cursor=pointer]
+                - button "5m" [ref=e100] [cursor=pointer]
+                - button "10m" [ref=e101] [cursor=pointer]
+                - button "15m" [ref=e102] [cursor=pointer]
+                - button "1h" [ref=e103] [cursor=pointer]
+                - button "4h" [ref=e104] [cursor=pointer]
+                - button "1d" [ref=e105] [cursor=pointer]
+              - generic [ref=e106]:
+                - button "1M" [ref=e107] [cursor=pointer]
+                - button "3M" [ref=e108] [cursor=pointer]
+                - button "6M" [ref=e109] [cursor=pointer]
+                - button "1Y" [ref=e110] [cursor=pointer]
+                - button "2Y" [ref=e111] [cursor=pointer]
+                - button "5Y" [ref=e112] [cursor=pointer]
+                - button "10Y" [ref=e113] [cursor=pointer]
+                - button "MAX" [ref=e114] [cursor=pointer]
+            - generic [ref=e115]:
+              - button "Indicators" [ref=e116] [cursor=pointer]
+              - button "Reset view" [ref=e117] [cursor=pointer]
+          - generic [ref=e118]:
+            - generic [ref=e119]: Indicators
+            - generic [ref=e120]:
+              - checkbox "SuperTrend-AI" [checked] [ref=e121]
+              - text: SuperTrend-AI
+            - generic [ref=e122]:
+              - generic [ref=e123]:
+                - generic [ref=e124]: ATR
+                - spinbutton "ATR" [ref=e125]: "14"
+              - generic [ref=e126]:
+                - generic [ref=e127]: Factor min
+                - spinbutton "Factor min" [ref=e128]: "1.2"
+              - generic [ref=e129]:
+                - generic [ref=e130]: Factor max
+                - spinbutton "Factor max" [ref=e131]: "4"
+              - generic [ref=e132]:
+                - generic [ref=e133]: Factor step
+                - spinbutton "Factor step" [ref=e134]: "0.2"
+              - generic [ref=e135]:
+                - generic [ref=e136]: Cluster
+                - combobox "Cluster" [ref=e137]:
+                  - option "Best" [selected]
+                  - option "Average"
+                  - option "Worst"
+              - generic [ref=e138]:
+                - generic [ref=e139]: k
+                - combobox "k" [ref=e140]:
+                  - option "2"
+                  - option "3" [selected]
+              - generic [ref=e141]:
+                - generic [ref=e142]: Use AMA
+                - checkbox "Use AMA" [checked] [ref=e143]
+              - generic [ref=e144]:
+                - generic [ref=e145]: Immediate flips
+                - checkbox "Immediate flips" [ref=e146]
+            - generic [ref=e147]:
+              - checkbox "EMA (20)" [checked] [ref=e148]
+              - text: EMA (20)
+            - generic [ref=e149]:
+              - checkbox "RSI (14)" [ref=e150]
+              - text: RSI (14)
+            - generic [ref=e151]:
+              - checkbox "Session VWAP" [ref=e152]
+              - text: Session VWAP
+            - generic [ref=e154]:
+              - generic [ref=e155]: Mult
+              - spinbutton "Mult" [ref=e156]: "1"
+            - generic [ref=e157]:
+              - checkbox "Bollinger Bands" [ref=e158]
+              - text: Bollinger Bands
+            - generic [ref=e159]:
+              - generic [ref=e160]:
+                - generic [ref=e161]: Period
+                - spinbutton "Period" [ref=e162]: "20"
+              - generic [ref=e163]:
+                - generic [ref=e164]: Mult
+                - spinbutton "Mult" [ref=e165]: "2"
+            - generic [ref=e166]:
+              - checkbox "MACD" [checked] [ref=e167]
+              - text: MACD
+            - generic [ref=e168]:
+              - generic [ref=e169]:
+                - generic [ref=e170]: Fast
+                - spinbutton "Fast" [ref=e171]: "12"
+              - generic [ref=e172]:
+                - generic [ref=e173]: Slow
+                - spinbutton "Slow" [ref=e174]: "26"
+              - generic [ref=e175]:
+                - generic [ref=e176]: Signal
+                - spinbutton "Signal" [ref=e177]: "9"
+            - generic [ref=e178]:
+              - checkbox "KDJ (Stoch K/D + J)" [checked] [ref=e179]
+              - text: KDJ (Stoch K/D + J)
+            - generic [ref=e180]:
+              - generic [ref=e181]:
+                - generic [ref=e182]: "N"
+                - spinbutton "N" [ref=e183]: "9"
+              - generic [ref=e184]:
+                - generic [ref=e185]: K
+                - spinbutton "K" [ref=e186]: "3"
+              - generic [ref=e187]:
+                - generic [ref=e188]: D
+                - spinbutton "D" [ref=e189]: "3"
+              - generic [ref=e190]:
+                - checkbox "Anchor to RTH" [checked] [ref=e191]
+                - generic [ref=e192]: Anchor to RTH
+            - generic [ref=e193]:
+              - generic [ref=e195]: Economic Calendar
+              - switch [ref=e196] [cursor=pointer]
+            - generic [ref=e197]:
+              - generic [ref=e198]:
+                - heading "Styles" [level=4] [ref=e199]
+                - generic [ref=e200]:
+                  - button "Apply to all" [ref=e201] [cursor=pointer]
+                  - button "Reset" [ref=e202] [cursor=pointer]
+              - generic [ref=e203]:
+                - generic [ref=e204]: Global line width
+                - slider [ref=e205]: "2"
+                - generic [ref=e206]: Global histogram thickness
+                - combobox [ref=e207]:
+                  - option "Thin"
+                  - option "Normal" [selected]
+                  - option "Wide"
+              - generic [ref=e208]:
+                - generic [ref=e209]:
+                  - generic [ref=e210]: ST-AI line
+                  - slider [ref=e211]: "2"
+                  - generic [ref=e212]: 2px
+                - generic [ref=e213]:
+                  - generic [ref=e214]: VWAP line
+                  - slider [ref=e215]: "2"
+                  - generic [ref=e216]: 2px
+                - generic [ref=e217]:
+                  - generic [ref=e218]: MACD line
+                  - slider [ref=e219]: "2"
+                  - generic [ref=e220]: 2px
+                - generic [ref=e221]:
+                  - generic [ref=e222]: MACD signal
+                  - slider [ref=e223]: "2"
+                  - generic [ref=e224]: 2px
+                - generic [ref=e225]:
+                  - generic [ref=e226]: KDJ K
+                  - slider [ref=e227]: "2"
+                  - generic [ref=e228]: 2px
+                - generic [ref=e229]:
+                  - generic [ref=e230]: KDJ D
+                  - slider [ref=e231]: "2"
+                  - generic [ref=e232]: 2px
+                - generic [ref=e233]:
+                  - generic [ref=e234]: KDJ J
+                  - slider [ref=e235]: "2"
+                  - generic [ref=e236]: 2px
+                - generic [ref=e237]:
+                  - generic [ref=e238]: MACD histogram
+                  - combobox [ref=e239]:
+                    - option "Thin"
+                    - option "Normal" [selected]
+                    - option "Wide"
+          - generic [ref=e240]:
+            - table [ref=e243]:
+              - row [ref=e244]:
+                - cell
+                - cell [ref=e245]:
+                  - link "Charting by TradingView" [ref=e249] [cursor=pointer]:
+                    - /url: https://www.tradingview.com/?utm_medium=lwc-link&utm_campaign=lwc-chart&utm_source=localhost/
+                    - img [ref=e250]
+                - cell [ref=e254]
+              - row [ref=e258]:
+                - cell
+                - cell [ref=e259]
+                - cell [ref=e263]
+            - generic [ref=e266]: Loading…
+          - table [ref=e269]:
+            - row [ref=e270]:
+              - cell
+              - cell [ref=e271]:
+                - link "Charting by TradingView" [ref=e275] [cursor=pointer]:
+                  - /url: https://www.tradingview.com/?utm_medium=lwc-link&utm_campaign=lwc-chart&utm_source=localhost/
+                  - img [ref=e276]
+              - cell [ref=e280]
+            - row [ref=e284]:
+              - cell
+              - cell [ref=e285]
+              - cell [ref=e289]
+          - table [ref=e294]:
+            - row [ref=e295]:
+              - cell
+              - cell [ref=e296]:
+                - link "Charting by TradingView" [ref=e300] [cursor=pointer]:
+                  - /url: https://www.tradingview.com/?utm_medium=lwc-link&utm_campaign=lwc-chart&utm_source=localhost/
+                  - img [ref=e301]
+              - cell [ref=e305]
+            - row [ref=e309]:
+              - cell
+              - cell [ref=e310]
+              - cell [ref=e314]
+        - complementary "Stock news and updates" [ref=e317]:
+          - generic [ref=e319]:
+            - img [ref=e320]
+            - heading "Latest News" [level=3] [ref=e323]
+      - generic [ref=e334]:
+        - generic [ref=e336]:
+          - generic [ref=e337]:
+            - img [ref=e338]
+            - heading "Pattern Detection" [level=3] [ref=e340]
+          - paragraph [ref=e341]: No patterns detected in current timeframe
+        - complementary "Related stocks" [ref=e342]:
+          - heading "Related Stocks" [level=3] [ref=e344]:
+            - img [ref=e345]
+            - text: Related Stocks
+          - list [ref=e348]:
+            - listitem [ref=e349]:
+              - generic [ref=e350]:
+                - link "View MSFT stock details" [ref=e351] [cursor=pointer]:
+                  - /url: /stocks/MSFT
+                  - text: MSFT
+                - generic [ref=e352]: Microsoft Corporation
+                - link "Technology" [ref=e353] [cursor=pointer]:
+                  - /url: /markets/sectors/technology
+            - listitem [ref=e354]:
+              - generic [ref=e355]:
+                - link "View GOOGL stock details" [ref=e356] [cursor=pointer]:
+                  - /url: /stocks/GOOGL
+                  - text: GOOGL
+                - generic [ref=e357]: Alphabet Inc.
+                - link "Communication Services" [ref=e358] [cursor=pointer]:
+                  - /url: /markets/sectors/communication-services
+            - listitem [ref=e359]:
+              - generic [ref=e360]:
+                - link "View AMZN stock details" [ref=e361] [cursor=pointer]:
+                  - /url: /stocks/AMZN
+                  - text: AMZN
+                - generic [ref=e362]: Amazon.com, Inc.
+                - link "Consumer Discretionary" [ref=e363] [cursor=pointer]:
+                  - /url: /markets/sectors/consumer-discretionary
+          - link "Compare AAPL with 3 related stocks" [ref=e365] [cursor=pointer]:
+            - /url: /compare?symbols=AAPL,MSFT,GOOGL,AMZN
+            - text: Compare all 4 stocks →
+  - contentinfo [ref=e366]:
+    - generic [ref=e367]:
+      - generic [ref=e368]:
+        - generic [ref=e369]:
+          - generic [ref=e370]:
+            - img [ref=e371]
+            - generic [ref=e373]: Stock Whisperer
+          - paragraph [ref=e374]: Professional stock trading and analysis platform with real-time market data and ML-powered insights.
+          - generic [ref=e375]:
+            - link "Visit our GitHub" [ref=e376] [cursor=pointer]:
+              - /url: https://github.com
+              - img [ref=e377]
+            - link "Follow us on Twitter" [ref=e380] [cursor=pointer]:
+              - /url: https://twitter.com
+              - img [ref=e381]
+            - link "Email us" [ref=e383] [cursor=pointer]:
+              - /url: mailto:support@stockwhisperer.app
+              - img [ref=e384]
+        - navigation "Markets navigation" [ref=e387]:
+          - heading "Markets" [level=3] [ref=e388]
+          - list [ref=e389]:
+            - listitem [ref=e390]:
+              - link "Market Overview" [ref=e391] [cursor=pointer]:
+                - /url: /markets
+            - listitem [ref=e392]:
+              - link "Market Indices" [ref=e393] [cursor=pointer]:
+                - /url: /markets/indices
+            - listitem [ref=e394]:
+              - link "Sector Performance" [ref=e395] [cursor=pointer]:
+                - /url: /markets/sectors
+            - listitem [ref=e396]:
+              - link "All Stocks" [ref=e397] [cursor=pointer]:
+                - /url: /stocks
+        - navigation "Tools navigation" [ref=e398]:
+          - heading "Tools" [level=3] [ref=e399]
+          - list [ref=e400]:
+            - listitem [ref=e401]:
+              - link "My Watchlist" [ref=e402] [cursor=pointer]:
+                - /url: /watchlist
+            - listitem [ref=e403]:
+              - link "Stock Comparison" [ref=e404] [cursor=pointer]:
+                - /url: /compare
+            - listitem [ref=e405]:
+              - link "Stock Screener" [ref=e406] [cursor=pointer]:
+                - /url: /screener
+            - listitem [ref=e407]:
+              - link "Price Alerts" [ref=e408] [cursor=pointer]:
+                - /url: /alerts
+            - listitem [ref=e409]:
+              - link "Portfolio Tracker" [ref=e410] [cursor=pointer]:
+                - /url: /portfolio
+        - navigation "Help and information navigation" [ref=e411]:
+          - heading "Help & Info" [level=3] [ref=e412]
+          - list [ref=e413]:
+            - listitem [ref=e414]:
+              - link "Help Center" [ref=e415] [cursor=pointer]:
+                - /url: /help
+            - listitem [ref=e416]:
+              - link "Getting Started" [ref=e417] [cursor=pointer]:
+                - /url: /help/getting-started
+            - listitem [ref=e418]:
+              - link "Technical Indicators" [ref=e419] [cursor=pointer]:
+                - /url: /help/indicators
+            - listitem [ref=e420]:
+              - link "About Us" [ref=e421] [cursor=pointer]:
+                - /url: /about
+            - listitem [ref=e422]:
+              - link "Privacy Policy" [ref=e423] [cursor=pointer]:
+                - /url: /privacy
+            - listitem [ref=e424]:
+              - link "Terms of Service" [ref=e425] [cursor=pointer]:
+                - /url: /terms
+      - generic [ref=e426]:
+        - paragraph [ref=e427]: © 2025 Stock Whisperer. All rights reserved.
+        - generic [ref=e428]:
+          - link "Privacy" [ref=e429] [cursor=pointer]:
+            - /url: /privacy
+          - link "Terms" [ref=e430] [cursor=pointer]:
+            - /url: /terms
+          - link "Sitemap" [ref=e431] [cursor=pointer]:
+            - /url: /sitemap
+```

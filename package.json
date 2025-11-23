@@ -18,8 +18,8 @@
     "stai:reg": "tsx scripts/stai_regression.ts",
     "e2e:clean": "bash -lc 'lsof -ti :5173 -sTCP:LISTEN | xargs -r kill; lsof -ti :5174 -sTCP:LISTEN | xargs -r kill'",
     "e2e": "npm run -w frontend e2e",
-    "e2e:dev": "npm run -w frontend e2e -- --project=chromium-dev",
-    "e2e:preview": "npm run -w frontend e2e -- --project=chromium-preview",
+    "e2e:dev": "npm run -w frontend e2e -- --project=chromium",
+    "e2e:preview": "npm run -w frontend e2e -- --project=chromium",
     "e2e:grep": "npm run -w frontend e2e -- --grep"
   },
   "dependencies": {
