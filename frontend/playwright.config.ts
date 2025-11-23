@@ -37,7 +37,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'bash -lc "VITE_QA_PROBE=1 npm run build && npm run preview -- --host --port 5174"',
+    // Use dedicated E2E preview so build-time env (QA probe, API/WS) is consistent.
+    command: 'npm run preview:e2e',
     url: process.env.E2E_BASE_URL ?? 'http://localhost:5174',
     reuseExistingServer: !process.env.CI,
     timeout: 240_000,

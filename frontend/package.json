@@ -11,6 +11,8 @@
     "lint": "eslint src --ext .ts,.tsx",
     "preview": "vite preview --host --port 5173",
     "debug:preview": "cross-env VITE_QA_PROBE=1 VITE_CALENDAR_ENABLED=1 vite build && vite preview --host --port 5174",
+    "build:e2e": "cross-env VITE_E2E=1 VITE_QA_PROBE=1 VITE_API_URL=http://localhost:8001 VITE_WS_URL=ws://localhost:8001/ws vite build",
+    "preview:e2e": "npm run build:e2e && vite preview --host --port 5174 --strictPort",
     "ffext:run": "web-ext run --source-dir ../tools/ff-qa-panel --firefox=\"$FF_BIN\" --start-url 'http://localhost:5174/?symbol=AAPL&mock=1&seed=1337&probe=1'",
     "debug:all": "run-p debug:preview ffext:run",
     "test": "vitest --run",

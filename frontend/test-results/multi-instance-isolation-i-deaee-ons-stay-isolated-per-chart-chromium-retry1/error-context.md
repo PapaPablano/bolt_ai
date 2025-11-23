@@ -1,0 +1,414 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - generic:
+    - link "Skip to main content" [ref=e4] [cursor=pointer]:
+      - /url: "#main-content"
+    - link "Skip to watchlist" [ref=e5] [cursor=pointer]:
+      - /url: "#watchlist"
+    - link "Skip to chart" [ref=e6] [cursor=pointer]:
+      - /url: "#chart"
+    - link "Skip to news" [ref=e7] [cursor=pointer]:
+      - /url: "#news"
+  - banner [ref=e8]:
+    - generic [ref=e9]:
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - img [ref=e12]
+          - generic [ref=e14]:
+            - paragraph [ref=e15]: Stock Whisperer
+            - heading "Intelligent Market Navigation" [level=1] [ref=e16]
+        - navigation "Primary" [ref=e17]:
+          - link "Dashboard" [ref=e18] [cursor=pointer]:
+            - /url: /
+          - link "Watchlist" [ref=e19] [cursor=pointer]:
+            - /url: /watchlist
+          - link "Markets" [ref=e20] [cursor=pointer]:
+            - /url: /markets
+          - link "Compare" [ref=e21] [cursor=pointer]:
+            - /url: /compare
+          - link "Help" [ref=e22] [cursor=pointer]:
+            - /url: /help
+      - search "Global symbol search" [ref=e23]:
+        - search "Search stocks" [ref=e24]:
+          - generic [ref=e25]:
+            - img [ref=e26]
+            - generic [ref=e29]: Search for stocks by symbol or company name
+            - searchbox "Search for stocks by symbol or company name" [ref=e30]
+  - main [ref=e31]:
+    - region "Stock watchlist" [ref=e32]:
+      - heading "Watchlist" [level=2] [ref=e33]
+      - generic [ref=e34]:
+        - button "AAPL Real-time +0.00% $270.86 +$0.00" [ref=e36] [cursor=pointer]:
+          - generic [ref=e37]:
+            - generic [ref=e38]:
+              - heading "AAPL" [level=3] [ref=e39]
+              - paragraph [ref=e40]: Real-time
+            - generic [ref=e41]:
+              - img [ref=e42]
+              - text: +0.00%
+          - generic [ref=e45]:
+            - generic [ref=e46]: $270.86
+            - generic [ref=e47]: +$0.00
+        - button "MSFT Real-time +0.00% $472.19 +$0.00" [ref=e49] [cursor=pointer]:
+          - generic [ref=e50]:
+            - generic [ref=e51]:
+              - heading "MSFT" [level=3] [ref=e52]
+              - paragraph [ref=e53]: Real-time
+            - generic [ref=e54]:
+              - img [ref=e55]
+              - text: +0.00%
+          - generic [ref=e58]:
+            - generic [ref=e59]: $472.19
+            - generic [ref=e60]: +$0.00
+        - button "GOOGL Real-time +0.00% $299.86 +$0.00" [ref=e62] [cursor=pointer]:
+          - generic [ref=e63]:
+            - generic [ref=e64]:
+              - heading "GOOGL" [level=3] [ref=e65]
+              - paragraph [ref=e66]: Real-time
+            - generic [ref=e67]:
+              - img [ref=e68]
+              - text: +0.00%
+          - generic [ref=e71]:
+            - generic [ref=e72]: $299.86
+            - generic [ref=e73]: +$0.00
+        - button "AMZN Real-time +0.00% $220.71 +$0.00" [ref=e75] [cursor=pointer]:
+          - generic [ref=e76]:
+            - generic [ref=e77]:
+              - heading "AMZN" [level=3] [ref=e78]
+              - paragraph [ref=e79]: Real-time
+            - generic [ref=e80]:
+              - img [ref=e81]
+              - text: +0.00%
+          - generic [ref=e84]:
+            - generic [ref=e85]: $220.71
+            - generic [ref=e86]: +$0.00
+        - button "TSLA Real-time +0.00% $393.51 +$0.00" [ref=e88] [cursor=pointer]:
+          - generic [ref=e89]:
+            - generic [ref=e90]:
+              - heading "TSLA" [level=3] [ref=e91]
+              - paragraph [ref=e92]: Real-time
+            - generic [ref=e93]:
+              - img [ref=e94]
+              - text: +0.00%
+          - generic [ref=e97]:
+            - generic [ref=e98]: $393.51
+            - generic [ref=e99]: +$0.00
+        - button "NVDA Real-time +0.00% $180.23 +$0.00" [ref=e101] [cursor=pointer]:
+          - generic [ref=e102]:
+            - generic [ref=e103]:
+              - heading "NVDA" [level=3] [ref=e104]
+              - paragraph [ref=e105]: Real-time
+            - generic [ref=e106]:
+              - img [ref=e107]
+              - text: +0.00%
+          - generic [ref=e110]:
+            - generic [ref=e111]: $180.23
+            - generic [ref=e112]: +$0.00
+    - generic "Trending insights" [ref=e113]:
+      - region "Trending stocks" [ref=e114]:
+        - generic [ref=e115]:
+          - heading "Trending now" [level=2] [ref=e116]:
+            - img [ref=e117]
+            - text: Trending now
+          - link "Open screener" [ref=e119] [cursor=pointer]:
+            - /url: /screener
+        - list [ref=e120]:
+          - listitem [ref=e121]:
+            - generic [ref=e122]:
+              - link "View AAPL stock details" [ref=e123] [cursor=pointer]:
+                - /url: /stocks/AAPL
+                - text: AAPL
+              - paragraph [ref=e124]: Apple Inc.
+              - link "Technology sector →" [ref=e125] [cursor=pointer]:
+                - /url: /markets/sectors/technology
+            - generic [ref=e126]:
+              - paragraph [ref=e127]: $270.86
+              - paragraph [ref=e128]: +0.00%
+            - button "Load chart" [ref=e129] [cursor=pointer]
+          - listitem [ref=e130]:
+            - generic [ref=e131]:
+              - link "View MSFT stock details" [ref=e132] [cursor=pointer]:
+                - /url: /stocks/MSFT
+                - text: MSFT
+              - paragraph [ref=e133]: Microsoft Corporation
+              - link "Technology sector →" [ref=e134] [cursor=pointer]:
+                - /url: /markets/sectors/technology
+            - generic [ref=e135]:
+              - paragraph [ref=e136]: $472.19
+              - paragraph [ref=e137]: +0.00%
+            - button "Load chart" [ref=e138] [cursor=pointer]
+          - listitem [ref=e139]:
+            - generic [ref=e140]:
+              - link "View GOOGL stock details" [ref=e141] [cursor=pointer]:
+                - /url: /stocks/GOOGL
+                - text: GOOGL
+              - paragraph [ref=e142]: Alphabet Inc.
+              - link "Communication Services sector →" [ref=e143] [cursor=pointer]:
+                - /url: /markets/sectors/communication-services
+            - generic [ref=e144]:
+              - paragraph [ref=e145]: $299.86
+              - paragraph [ref=e146]: +0.00%
+            - button "Load chart" [ref=e147] [cursor=pointer]
+          - listitem [ref=e148]:
+            - generic [ref=e149]:
+              - link "View AMZN stock details" [ref=e150] [cursor=pointer]:
+                - /url: /stocks/AMZN
+                - text: AMZN
+              - paragraph [ref=e151]: Amazon.com, Inc.
+              - link "Consumer Discretionary sector →" [ref=e152] [cursor=pointer]:
+                - /url: /markets/sectors/consumer-discretionary
+            - generic [ref=e153]:
+              - paragraph [ref=e154]: $220.71
+              - paragraph [ref=e155]: +0.00%
+            - button "Load chart" [ref=e156] [cursor=pointer]
+          - listitem [ref=e157]:
+            - generic [ref=e158]:
+              - link "View TSLA stock details" [ref=e159] [cursor=pointer]:
+                - /url: /stocks/TSLA
+                - text: TSLA
+              - paragraph [ref=e160]: Tesla, Inc.
+              - link "Consumer Discretionary sector →" [ref=e161] [cursor=pointer]:
+                - /url: /markets/sectors/consumer-discretionary
+            - generic [ref=e162]:
+              - paragraph [ref=e163]: $393.51
+              - paragraph [ref=e164]: +0.00%
+            - button "Load chart" [ref=e165] [cursor=pointer]
+    - region "Trading chart and analysis" [ref=e166]:
+      - generic [ref=e167]:
+        - generic [ref=e168]:
+          - heading "AAPL" [level=2] [ref=e169]
+          - paragraph [ref=e170]: "Current: 270.86 USD"
+          - paragraph [ref=e171]:
+            - text: "Sector:"
+            - link "Technology" [ref=e172] [cursor=pointer]:
+              - /url: /markets/sectors/technology
+        - generic [ref=e173]:
+          - button "Compare" [ref=e174] [cursor=pointer]:
+            - img [ref=e175]
+            - text: Compare
+          - link "Open comparison view for AAPL and related stocks" [ref=e180] [cursor=pointer]:
+            - /url: /compare?symbols=AAPL%2CMSFT%2CGOOGL%2CAMZN
+            - text: Open comparison page
+      - generic [ref=e181]:
+        - generic [ref=e184]: No chart data available
+        - complementary "Stock news and updates" [ref=e185]:
+          - generic [ref=e186]:
+            - generic [ref=e187]:
+              - img [ref=e188]
+              - heading "Latest News" [level=3] [ref=e191]
+            - generic [ref=e192]:
+              - 'link "Consumer Tech News (Nov 17-21): U.S. Jobs Surge in September, Trump Considers Delaying Semiconductor Tariffs & More U.S. labor market rebounds in September, boosting growth optimism and raising questions over a potential Federal Reserve rate cut in December. Trump administration considers delaying semiconductor tariffs, signaling a major policy shift for U.S. tech imports and global supply chains. benzinga 3h ago" [ref=e193] [cursor=pointer]':
+                - /url: https://www.benzinga.com/markets/market-summary/25/11/49022214/consumer-tech-news-nov-17-21-u-s-jobs-surge-in-september-trump-considers-delaying-semiconductor-tariffs-more
+                - generic [ref=e194]:
+                  - 'heading "Consumer Tech News (Nov 17-21): U.S. Jobs Surge in September, Trump Considers Delaying Semiconductor Tariffs & More" [level=4] [ref=e195]'
+                  - img [ref=e196]
+                - paragraph [ref=e200]: U.S. labor market rebounds in September, boosting growth optimism and raising questions over a potential Federal Reserve rate cut in December. Trump administration considers delaying semiconductor tariffs, signaling a major policy shift for U.S. tech imports and global supply chains.
+                - generic [ref=e201]:
+                  - generic [ref=e202]: benzinga
+                  - generic [ref=e203]: 3h ago
+              - 'link "Weekend Round-Up: Nvidia''s Record Revenue, Apple''s F1 Rights, Google''s Gemini 3 And Meta''s AI Safety Measures From record-breaking revenues to broadcast rights and AI advancements, the tech stories were as diverse as they were impactful this week. benzinga 5h ago" [ref=e204] [cursor=pointer]':
+                - /url: https://www.benzinga.com/markets/tech/25/11/49022106/weekend-round-up-nvidias-record-revenue-apples-f1-rights-googles-gemini-3-and-metas-ai-safety-measures
+                - generic [ref=e205]:
+                  - 'heading "Weekend Round-Up: Nvidia''s Record Revenue, Apple''s F1 Rights, Google''s Gemini 3 And Meta''s AI Safety Measures" [level=4] [ref=e206]'
+                  - img [ref=e207]
+                - paragraph [ref=e211]: From record-breaking revenues to broadcast rights and AI advancements, the tech stories were as diverse as they were impactful this week.
+                - generic [ref=e212]:
+                  - generic [ref=e213]: benzinga
+                  - generic [ref=e214]: 5h ago
+              - 'link "iPhone Pocket, China Sales, $600 Million Patent Case And More: This Week In Appleverse Apple made headlines this weekend with a record-breaking TV drama, a viral new accessory, surging iPhone 17 sales in China, and a major $600 million patent ruling. benzinga 5h ago" [ref=e215] [cursor=pointer]':
+                - /url: https://www.benzinga.com/markets/tech/25/11/49022054/iphone-pocket-china-sales-600-million-patent-case-and-more-this-week-in-appleverse
+                - generic [ref=e216]:
+                  - 'heading "iPhone Pocket, China Sales, $600 Million Patent Case And More: This Week In Appleverse" [level=4] [ref=e217]'
+                  - img [ref=e218]
+                - paragraph [ref=e222]: Apple made headlines this weekend with a record-breaking TV drama, a viral new accessory, surging iPhone 17 sales in China, and a major $600 million patent ruling.
+                - generic [ref=e223]:
+                  - generic [ref=e224]: benzinga
+                  - generic [ref=e225]: 5h ago
+              - link "Is The Market Now Just The Mag-7? Investors Call Tech Concentration A Major Risk AAII survey confirms growing concern over concentration of mega-cap tech stocks in S&P 500. Sentiment improving but not confident. benzinga 1d ago" [ref=e226] [cursor=pointer]:
+                - /url: https://www.benzinga.com/etfs/broad-u-s-equity-etfs/25/11/49020601/is-the-market-now-just-the-mag-7-investors-call-tech-concentration-a-major-risk
+                - generic [ref=e227]:
+                  - heading "Is The Market Now Just The Mag-7? Investors Call Tech Concentration A Major Risk" [level=4] [ref=e228]
+                  - img [ref=e229]
+                - paragraph [ref=e233]: AAII survey confirms growing concern over concentration of mega-cap tech stocks in S&P 500. Sentiment improving but not confident.
+                - generic [ref=e234]:
+                  - generic [ref=e235]: benzinga
+                  - generic [ref=e236]: 1d ago
+              - link "Bernie Sanders Asks Whether AI Will Really Serve Workers Or 'What Mr Musk And Mr Bezos Have In Mind' As Geoffrey Hinton Reveals The Real Risk Sen. Bernie Sanders (I-Vt) and AI pioneer Geoffrey Hinton warned that artificial intelligence could improve lives — but only if it's controlled by people whose interests extend beyond those of tech billionaires. benzinga 1d ago" [ref=e237] [cursor=pointer]:
+                - /url: https://www.benzinga.com/markets/tech/25/11/49020085/bernie-sanders-asks-whether-ai-will-really-serve-workers-or-what-mr-musk-and-mr-bezos-have-in-mind-as-geoffrey-hinton-reveals-the-real-risk
+                - generic [ref=e238]:
+                  - heading "Bernie Sanders Asks Whether AI Will Really Serve Workers Or 'What Mr Musk And Mr Bezos Have In Mind' As Geoffrey Hinton Reveals The Real Risk" [level=4] [ref=e239]
+                  - img [ref=e240]
+                - paragraph [ref=e244]: Sen. Bernie Sanders (I-Vt) and AI pioneer Geoffrey Hinton warned that artificial intelligence could improve lives — but only if it's controlled by people whose interests extend beyond those of tech billionaires.
+                - generic [ref=e245]:
+                  - generic [ref=e246]: benzinga
+                  - generic [ref=e247]: 1d ago
+              - link "Apple Breaks A Record And It Has Nothing To Do With The iPhone 17 Apple set a new record in November and it has more to do with \"Breaking Bad\" than the success of the iPhone. benzinga 1d ago" [ref=e248] [cursor=pointer]:
+                - /url: https://www.benzinga.com/news/entertainment/25/11/49017252/apple-breaks-a-record-and-it-has-nothing-to-do-with-the-iphone-17
+                - generic [ref=e249]:
+                  - heading "Apple Breaks A Record And It Has Nothing To Do With The iPhone 17" [level=4] [ref=e250]
+                  - img [ref=e251]
+                - paragraph [ref=e255]: Apple set a new record in November and it has more to do with "Breaking Bad" than the success of the iPhone.
+                - generic [ref=e256]:
+                  - generic [ref=e257]: benzinga
+                  - generic [ref=e258]: 1d ago
+              - link "Stellar Nvidia Earnings No Match For Crypto Margin Calls; Rising Japan Yields Hurting the Carry Trade To gain an edge, this is what you need to know today. benzinga 2d ago" [ref=e259] [cursor=pointer]:
+                - /url: https://www.benzinga.com/Opinion/25/11/49007975/stellar-nvidia-earnings-no-match-for-crypto-margin-calls-rising-japan-yields-hurting-carry-trade
+                - generic [ref=e260]:
+                  - heading "Stellar Nvidia Earnings No Match For Crypto Margin Calls; Rising Japan Yields Hurting the Carry Trade" [level=4] [ref=e261]
+                  - img [ref=e262]
+                - paragraph [ref=e266]: To gain an edge, this is what you need to know today.
+                - generic [ref=e267]:
+                  - generic [ref=e268]: benzinga
+                  - generic [ref=e269]: 2d ago
+              - link "Congressman Bringing Back FAANG? Invests $750K In Netflix Stock While Avoiding Tesla A Congressman who has been buying millions of dollars in Magnificent Seven stocks adds Netflix stock to his shopping list. benzinga 2d ago" [ref=e270] [cursor=pointer]:
+                - /url: https://www.benzinga.com/news/politics/25/11/49005563/congressman-bringing-back-faang-invests-750k-in-netflix-stock-while-avoiding-tesla
+                - generic [ref=e271]:
+                  - heading "Congressman Bringing Back FAANG? Invests $750K In Netflix Stock While Avoiding Tesla" [level=4] [ref=e272]
+                  - img [ref=e273]
+                - paragraph [ref=e277]: A Congressman who has been buying millions of dollars in Magnificent Seven stocks adds Netflix stock to his shopping list.
+                - generic [ref=e278]:
+                  - generic [ref=e279]: benzinga
+                  - generic [ref=e280]: 2d ago
+              - 'link "Exploring The Competitive Space: Apple Versus Industry Peers In Technology Hardware, Storage &amp; Peripherals benzinga 2d ago" [ref=e281] [cursor=pointer]':
+                - /url: https://www.benzinga.com/insights/news/25/11/49003152/exploring-the-competitive-space-apple-versus-industry-peers-in-technology-hardware-storage-amp-peri
+                - generic [ref=e282]:
+                  - 'heading "Exploring The Competitive Space: Apple Versus Industry Peers In Technology Hardware, Storage &amp; Peripherals" [level=4] [ref=e283]'
+                  - img [ref=e284]
+                - paragraph
+                - generic [ref=e288]:
+                  - generic [ref=e289]: benzinga
+                  - generic [ref=e290]: 2d ago
+              - link "OpenAI Teams Up With Foxconn To Design And Manufacture AI Hardware In The US In a strategic move to strengthen the artificial intelligence (AI) infrastructure in the United States, OpenAI has partnered with the Taiwanese electronics giant Foxconn. benzinga 2d ago" [ref=e291] [cursor=pointer]:
+                - /url: https://www.benzinga.com/markets/tech/25/11/48997597/openai-teams-up-with-foxconn-to-design-and-manufacture-ai-hardware-in-the-us
+                - generic [ref=e292]:
+                  - heading "OpenAI Teams Up With Foxconn To Design And Manufacture AI Hardware In The US" [level=4] [ref=e293]
+                  - img [ref=e294]
+                - paragraph [ref=e298]: In a strategic move to strengthen the artificial intelligence (AI) infrastructure in the United States, OpenAI has partnered with the Taiwanese electronics giant Foxconn.
+                - generic [ref=e299]:
+                  - generic [ref=e300]: benzinga
+                  - generic [ref=e301]: 2d ago
+      - generic [ref=e302]:
+        - generic [ref=e304]:
+          - generic [ref=e305]:
+            - img [ref=e306]
+            - heading "Pattern Detection" [level=3] [ref=e308]
+          - paragraph [ref=e309]: No patterns detected in current timeframe
+        - complementary "Related stocks" [ref=e310]:
+          - heading "Related Stocks" [level=3] [ref=e312]:
+            - img [ref=e313]
+            - text: Related Stocks
+          - list [ref=e316]:
+            - listitem [ref=e317]:
+              - generic [ref=e318]:
+                - link "View MSFT stock details" [ref=e319] [cursor=pointer]:
+                  - /url: /stocks/MSFT
+                  - text: MSFT
+                - generic [ref=e320]: Microsoft Corporation
+                - link "Technology" [ref=e321] [cursor=pointer]:
+                  - /url: /markets/sectors/technology
+              - generic [ref=e322]: +0.00%
+            - listitem [ref=e323]:
+              - generic [ref=e324]:
+                - link "View GOOGL stock details" [ref=e325] [cursor=pointer]:
+                  - /url: /stocks/GOOGL
+                  - text: GOOGL
+                - generic [ref=e326]: Alphabet Inc.
+                - link "Communication Services" [ref=e327] [cursor=pointer]:
+                  - /url: /markets/sectors/communication-services
+              - generic [ref=e328]: +0.00%
+            - listitem [ref=e329]:
+              - generic [ref=e330]:
+                - link "View AMZN stock details" [ref=e331] [cursor=pointer]:
+                  - /url: /stocks/AMZN
+                  - text: AMZN
+                - generic [ref=e332]: Amazon.com, Inc.
+                - link "Consumer Discretionary" [ref=e333] [cursor=pointer]:
+                  - /url: /markets/sectors/consumer-discretionary
+              - generic [ref=e334]: +0.00%
+          - link "Compare AAPL with 3 related stocks" [ref=e336] [cursor=pointer]:
+            - /url: /compare?symbols=AAPL,MSFT,GOOGL,AMZN
+            - text: Compare all 4 stocks →
+  - contentinfo [ref=e337]:
+    - generic [ref=e338]:
+      - generic [ref=e339]:
+        - generic [ref=e340]:
+          - generic [ref=e341]:
+            - img [ref=e342]
+            - generic [ref=e344]: Stock Whisperer
+          - paragraph [ref=e345]: Professional stock trading and analysis platform with real-time market data and ML-powered insights.
+          - generic [ref=e346]:
+            - link "Visit our GitHub" [ref=e347] [cursor=pointer]:
+              - /url: https://github.com
+              - img [ref=e348]
+            - link "Follow us on Twitter" [ref=e351] [cursor=pointer]:
+              - /url: https://twitter.com
+              - img [ref=e352]
+            - link "Email us" [ref=e354] [cursor=pointer]:
+              - /url: mailto:support@stockwhisperer.app
+              - img [ref=e355]
+        - navigation "Markets navigation" [ref=e358]:
+          - heading "Markets" [level=3] [ref=e359]
+          - list [ref=e360]:
+            - listitem [ref=e361]:
+              - link "Market Overview" [ref=e362] [cursor=pointer]:
+                - /url: /markets
+            - listitem [ref=e363]:
+              - link "Market Indices" [ref=e364] [cursor=pointer]:
+                - /url: /markets/indices
+            - listitem [ref=e365]:
+              - link "Sector Performance" [ref=e366] [cursor=pointer]:
+                - /url: /markets/sectors
+            - listitem [ref=e367]:
+              - link "All Stocks" [ref=e368] [cursor=pointer]:
+                - /url: /stocks
+        - navigation "Tools navigation" [ref=e369]:
+          - heading "Tools" [level=3] [ref=e370]
+          - list [ref=e371]:
+            - listitem [ref=e372]:
+              - link "My Watchlist" [ref=e373] [cursor=pointer]:
+                - /url: /watchlist
+            - listitem [ref=e374]:
+              - link "Stock Comparison" [ref=e375] [cursor=pointer]:
+                - /url: /compare
+            - listitem [ref=e376]:
+              - link "Stock Screener" [ref=e377] [cursor=pointer]:
+                - /url: /screener
+            - listitem [ref=e378]:
+              - link "Price Alerts" [ref=e379] [cursor=pointer]:
+                - /url: /alerts
+            - listitem [ref=e380]:
+              - link "Portfolio Tracker" [ref=e381] [cursor=pointer]:
+                - /url: /portfolio
+        - navigation "Help and information navigation" [ref=e382]:
+          - heading "Help & Info" [level=3] [ref=e383]
+          - list [ref=e384]:
+            - listitem [ref=e385]:
+              - link "Help Center" [ref=e386] [cursor=pointer]:
+                - /url: /help
+            - listitem [ref=e387]:
+              - link "Getting Started" [ref=e388] [cursor=pointer]:
+                - /url: /help/getting-started
+            - listitem [ref=e389]:
+              - link "Technical Indicators" [ref=e390] [cursor=pointer]:
+                - /url: /help/indicators
+            - listitem [ref=e391]:
+              - link "About Us" [ref=e392] [cursor=pointer]:
+                - /url: /about
+            - listitem [ref=e393]:
+              - link "Privacy Policy" [ref=e394] [cursor=pointer]:
+                - /url: /privacy
+            - listitem [ref=e395]:
+              - link "Terms of Service" [ref=e396] [cursor=pointer]:
+                - /url: /terms
+      - generic [ref=e397]:
+        - paragraph [ref=e398]: © 2025 Stock Whisperer. All rights reserved.
+        - generic [ref=e399]:
+          - link "Privacy" [ref=e400] [cursor=pointer]:
+            - /url: /privacy
+          - link "Terms" [ref=e401] [cursor=pointer]:
+            - /url: /terms
+          - link "Sitemap" [ref=e402] [cursor=pointer]:
+            - /url: /sitemap
+```
