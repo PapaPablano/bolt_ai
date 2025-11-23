@@ -115,19 +115,29 @@ const STOCK_FEED = (Deno.env.get('ALPACA_STOCK_FEED') ?? 'iex').toLowerCase() ==
 const alpacaFetch = async (endpoint: string, apiType: 'data' | 'api' = 'data') => {
   const host = apiType === 'data' ? 'data.alpaca.markets' : 'api.alpaca.markets';
   const url = `https://${host}${endpoint}`;
-  
+
   const options = {
     method: 'GET',
     headers: {
       'APCA-API-KEY-ID': Deno.env.get('ALPACA_KEY_ID')!,
       'APCA-API-SECRET-KEY': Deno.env.get('ALPACA_SECRET_KEY')!,
     },
-  }
+  };
 
   const response = await fetch(url, options);
   if (!response.ok) {
     const errorText = await response.text();
+    const status = response.status;
+    const rateLimited = status === 429 || response.headers.get('x-ratelimit-remaining') === '0';
     console.error(`Alpaca API Error for ${url}: ${errorText}`);
+    console.log(JSON.stringify({
+      event: 'alpaca.error',
+      endpoint,
+      apiType,
+      status,
+      status_text: response.statusText,
+      rate_limited: rateLimited,
+    }));
     throw new Error(`Failed to fetch from Alpaca: ${response.status} ${response.statusText}`);
   }
   return response.json();
@@ -208,20 +218,36 @@ Deno.serve(async (req) => {
 
     const normalizedSymbol = String(symbol).toUpperCase()
     const cacheKey = getCacheKey(normalizedSymbol)
+    const startedAt = Date.now()
 
     console.log(`Fetching quote for ${normalizedSymbol}`)
 
     const cachedQuote = await getCachedQuote(cacheKey)
     if (cachedQuote) {
-      console.log(`Cache hit for ${normalizedSymbol}`)
+      const latencyMs = Date.now() - startedAt
+      console.log(`Cache hit for ${normalizedSymbol} (${latencyMs}ms)`)
+      console.log(JSON.stringify({
+        event: 'stock-quote.cache_hit',
+        symbol: normalizedSymbol,
+        latency_ms: latencyMs,
+      }))
       return new Response(
         JSON.stringify(cachedQuote),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
+    const alpacaStart = Date.now()
     const quote = await fetchQuoteFromAlpaca(normalizedSymbol)
-    console.log(`Successfully fetched from Alpaca: ${normalizedSymbol}`)
+    const alpacaMs = Date.now() - alpacaStart
+    const totalMs = Date.now() - startedAt
+    console.log(`Successfully fetched from Alpaca: ${normalizedSymbol} (${alpacaMs}ms, total ${totalMs}ms)`)
+    console.log(JSON.stringify({
+      event: 'stock-quote.alpaca_fetch',
+      symbol: normalizedSymbol,
+      alpaca_ms: alpacaMs,
+      total_ms: totalMs,
+    }))
 
     await setCachedQuote(cacheKey, quote)
 

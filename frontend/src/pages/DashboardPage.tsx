@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState, lazy } from 'react';
 import { GitCompare } from 'lucide-react';
 import { StockCard } from '../components/StockCard';
 import { NewsPanel } from '../components/NewsPanel';
@@ -11,7 +11,7 @@ import { updateMetaTags, generateStockMetadata } from '../lib/seo';
 import { URLBuilder, ROUTES } from '../lib/urlHelpers';
 import { useAnnouncement } from '../hooks/useFocusManagement';
 import { InternalLink } from '../components/InternalLink';
-import AdvancedCandleChart from '../components/AdvancedCandleChart';
+const AdvancedCandleChart = lazy(() => import('../components/AdvancedCandleChart'));
 import { useHistoricalBars } from '@/hooks/useHistoricalBars';
 import { useChartPrefs } from '@/hooks/useChartPrefs';
 
@@ -212,7 +212,15 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           <div className="lg:col-span-2">
             {chartData.length > 0 || forceChartRender ? (
-              <AdvancedCandleChart symbol={selectedSymbol} initialTf={tf} initialRange={range} height={600} />
+              <Suspense
+                fallback={
+                  <div className="bg-slate-800/50 border border-slate-700 rounded-lg h-[600px] flex items-center justify-center">
+                    <div className="text-slate-400">Loading chart...</div>
+                  </div>
+                }
+              >
+                <AdvancedCandleChart symbol={selectedSymbol} initialTf={tf} initialRange={range} height={600} />
+              </Suspense>
             ) : isLoadingChart ? (
               <div className="bg-slate-800/50 border border-slate-700 rounded-lg h-[600px] flex items-center justify-center">
                 <div className="text-slate-400">Loading chart...</div>

@@ -170,6 +170,17 @@ const fetchEquityDailyBars = async (params: {
 
   if (!response.ok) {
     const errorBody = await response.text()
+    const status = response.status
+    const rateLimited = status === 429 || response.headers.get('x-ratelimit-remaining') === '0'
+    console.error(`Alpaca equity bars request failed with status ${status} on URL ${url.toString()}: ${errorBody}`)
+    console.log(JSON.stringify({
+      event: 'alpaca.error',
+      kind: 'equity_bars',
+      symbol,
+      status,
+      status_text: response.statusText,
+      rate_limited: rateLimited,
+    }))
     throw new Error(`Alpaca equity bars request failed with status ${response.status} on URL ${url.toString()}: ${errorBody}`)
   }
 
@@ -211,6 +222,17 @@ const fetchFuturesDailyBars = async (params: {
 
     if (!response.ok) {
       const errorBody = await response.text()
+      const status = response.status
+      const rateLimited = status === 429 || response.headers.get('x-ratelimit-remaining') === '0'
+      console.error(`Alpaca futures bars request failed with status ${status} on URL ${url.toString()}: ${errorBody}`)
+      console.log(JSON.stringify({
+        event: 'alpaca.error',
+        kind: 'futures_bars',
+        symbol,
+        status,
+        status_text: response.statusText,
+        rate_limited: rateLimited,
+      }))
       throw new Error(`Alpaca futures bars request failed with status ${response.status} on URL ${url.toString()}: ${errorBody}`)
     }
 
@@ -346,12 +368,21 @@ Deno.serve(async (req) => {
 
     const symbol = String(symbolInput).toUpperCase()
     const cacheKey = getCacheKey(symbol, range, instrumentType)
+    const startedAt = Date.now()
 
     console.log(`Fetching Alpaca historical data for ${symbol} (${range})`)
 
     const cachedPayload = await getCachedPayload(cacheKey)
     if (cachedPayload?.data) {
-      console.log(`Historical cache hit for ${symbol} (${range})`)
+      const latencyMs = Date.now() - startedAt
+      console.log(`Historical cache hit for ${symbol} (${range}) in ${latencyMs}ms`)
+      console.log(JSON.stringify({
+        event: 'stock-historical.cache_hit',
+        symbol,
+        range,
+        instrumentType,
+        latency_ms: latencyMs,
+      }))
       return new Response(
         JSON.stringify({ ...cachedPayload, cacheHit: true, instrumentType }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -359,6 +390,7 @@ Deno.serve(async (req) => {
     }
 
     const { fromDate, toDate } = getDateRange(range)
+    const alpacaStart = Date.now()
 
     const dailyBars = await fetchAlpacaDailyBars({
       symbol,
@@ -366,6 +398,19 @@ Deno.serve(async (req) => {
       endDate: toDate,
       instrumentType,
     })
+
+    const alpacaMs = Date.now() - alpacaStart
+    const totalMs = Date.now() - startedAt
+    console.log(`Alpaca historical fetch for ${symbol} (${range}) returned ${dailyBars.length} bars in ${alpacaMs}ms (total ${totalMs}ms)`)      
+    console.log(JSON.stringify({
+      event: 'stock-historical.alpaca_fetch',
+      symbol,
+      range,
+      instrumentType,
+      bars: dailyBars.length,
+      alpaca_ms: alpacaMs,
+      total_ms: totalMs,
+    }))
 
     if (!dailyBars.length) {
       return new Response(
