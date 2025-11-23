@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useHistoricalBars } from './useHistoricalBars';
 
@@ -42,7 +42,7 @@ describe('useHistoricalBars', () => {
   it('normalizes symbol and range and runs query for valid symbol', async () => {
     const wrapper = createWrapper();
 
-    const { result, waitFor } = renderHook(
+    const { result } = renderHook(
       () => useHistoricalBars(' aapl ', '1Day', '1d'),
       { wrapper },
     );

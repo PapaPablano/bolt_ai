@@ -1,11 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { useChartPrefs } from './useChartPrefs';
 
-const getUserMock = vi.fn();
-const fromMock = vi.fn();
-const insertMock = vi.fn();
-const upsertMock = vi.fn();
+const { getUserMock, fromMock, insertMock, upsertMock } = vi.hoisted(() => ({
+  getUserMock: vi.fn(),
+  fromMock: vi.fn(),
+  insertMock: vi.fn(),
+  upsertMock: vi.fn(),
+}));
 
 vi.mock('@/lib/supabaseClient', () => ({
   supabase: {
@@ -39,9 +41,9 @@ describe('useChartPrefs', () => {
     getUserMock.mockResolvedValue({ data: { user: null }, error: null });
     fromMock.mockResolvedValue({ data: null, error: null });
 
-    const { result, waitForNextUpdate } = renderHook(() => useChartPrefs());
+    const { result } = renderHook(() => useChartPrefs());
 
-    await waitForNextUpdate();
+    await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.loading).toBe(false);
     expect(result.current.prefs.default_timeframe).toBeDefined();
@@ -53,9 +55,9 @@ describe('useChartPrefs', () => {
     fromMock.mockResolvedValue({ data: null, error: { code: 'PGRST116' } });
     insertMock.mockResolvedValue({ error: null });
 
-    const { result, waitForNextUpdate } = renderHook(() => useChartPrefs());
+    const { result } = renderHook(() => useChartPrefs());
 
-    await waitForNextUpdate();
+    await waitFor(() => expect(result.current.loading).toBe(false));
 
     act(() => {
       result.current.setDefaultTf('1Hour');
