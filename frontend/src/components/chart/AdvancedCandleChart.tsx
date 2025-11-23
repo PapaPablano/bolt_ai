@@ -30,6 +30,7 @@ import { RangeBar } from './RangeBar';
 import { Button } from '@/components/ui/button';
 import PaneKDJ from './PaneKDJ';
 import { genMockBars } from '@/utils/mock';
+import { isTimeWithinBounds } from '@/workers/windowBounds';
 
 type Props = { symbol: string; initialTf?: TF; initialRange?: Range; height?: number };
 type ProbeState = { ok: boolean; error?: string; lastEvent?: string };
@@ -886,6 +887,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
 
     const entireRange =
       normalized.length > 0 ? { from: normalized[0].time, to: normalized[normalized.length - 1].time } : null;
+    pushWindowToWorker(entireRange, WORKER_VISIBLE_POINT_CAP);
     applyVisibleDecimation(entireRange);
 
     const last = normalized[normalized.length - 1] ?? null;
@@ -1020,6 +1022,10 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     const tickSec = toSec(liveBar.time);
     assertBucketInvariant(tickSec, tf);
     const alignedSec = alignNYSEBucketStartUtcSec(tickSec, tf);
+    const bounds = lastVisibleRangeRef.current;
+    if (shouldIgnoreLiveBar(alignedSec, bounds)) {
+      return;
+    }
     const series = candleRef.current;
     const lastT = lastTimeSecRef.current;
     const step = bucketSec(tf);
@@ -1448,5 +1454,7 @@ function getAnchoredOriginMs(tf: TF, referenceMs: number) {
   return tf === '1Day' ? etMidnightUtc(referenceMs) : resolveSessionOpenMs(referenceMs);
 }
 
+const shouldIgnoreLiveBar = (alignedSeconds: number, bounds: { from: number; to: number } | null) => !isTimeWithinBounds(alignedSeconds, bounds);
+
 /* @__TEST_ONLY__ */
-export const __test = { fromChartTimeValue, mergePanePatch };
+export const __test = { fromChartTimeValue, mergePanePatch, shouldIgnoreLiveBar };

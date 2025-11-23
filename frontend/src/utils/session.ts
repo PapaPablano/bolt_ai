@@ -74,7 +74,9 @@ export function makeSessionResolver(calendar?: TradingCalendar) {
   const isFullClosure = (midnightMs: number) => {
     const weekday = toEtParts(midnightMs).weekday;
     if (WEEKEND.has(weekday)) return true;
-    return calendar?.isFullHoliday?.(midnightMs) === true;
+    if (calendar?.isFullHoliday?.(midnightMs) === true) return true;
+    if (calendar?.isTradingDay && !calendar.isTradingDay(midnightMs)) return true;
+    return false;
   };
 
   const shiftMidnight = (midnightMs: number, direction: -1 | 1) => {

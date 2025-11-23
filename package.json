@@ -14,6 +14,7 @@
     "smoke": "tsx scripts/smokeTest.ts",
     "invoke": "tsx scripts/testInvoke.ts",
     "vite:server": "tsx scripts/startViteServer.ts",
+    "ff:detect": "tsx scripts/ffDetect.ts",
     "stai:reg": "tsx scripts/stai_regression.ts",
     "e2e:clean": "bash -lc 'lsof -ti :5173 -sTCP:LISTEN | xargs -r kill; lsof -ti :5174 -sTCP:LISTEN | xargs -r kill'",
     "e2e": "npm run -w frontend e2e",

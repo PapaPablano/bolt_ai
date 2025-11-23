@@ -9,13 +9,13 @@ import {
   type StPerfState,
 } from '@/utils/indicators-supertrend-perf';
 import { decimateLTTB, type XY } from '@/utils/lttb';
+import { normalizeBounds, windowsEqual, isTimeWithinBounds, type WindowBounds } from '@/workers/windowBounds';
 
 type IndName = 'STAI' | 'EMA' | 'RSI' | 'VWAP' | 'BB' | 'MACD' | 'KDJ';
 type PaneName = 'kdj';
 
 type MsgInit = { type: 'INIT'; symbol: string; tf: string; stParams?: StPerfParams };
 
-type WindowBounds = { from: number; to: number } | null;
 type MsgSetHistory = { type: 'SET_HISTORY'; bars: Candle[] };
 type MsgLive = { type: 'LIVE_BAR'; bar: Candle; barClosed: boolean };
 type MsgToggle = { type: 'TOGGLE'; name: IndName; on: boolean };
@@ -186,26 +186,7 @@ const encodeMultiPoint = (points: Record<string, LinePt | CompactPoint>): MultiP
   return out;
 };
 
-const windowsEqual = (a: WindowBounds, b: WindowBounds) => {
-  if (!a && !b) return true;
-  if (!a || !b) return false;
-  return a.from === b.from && a.to === b.to;
-};
-
-const normalizeBounds = (bounds: WindowBounds): WindowBounds => {
-  if (!bounds) return null;
-  if (!Number.isFinite(bounds.from) || !Number.isFinite(bounds.to)) return null;
-  const from = Math.min(bounds.from, bounds.to);
-  const to = Math.max(bounds.from, bounds.to);
-  if (from === to) return null;
-  return { from: Math.floor(from), to: Math.floor(to) };
-};
-
-const isTimeInWindow = (time: number) => {
-  const bounds = state.windowBounds;
-  if (!bounds) return true;
-  return time >= bounds.from && time <= bounds.to;
-};
+const isTimeInWindow = (time: number) => isTimeWithinBounds(time, state.windowBounds);
 
 const decimateSeries = (series: LinePt[], maxPoints: number): LinePt[] => {
   if (!Number.isFinite(maxPoints) || maxPoints < 3 || series.length <= maxPoints) return series;
