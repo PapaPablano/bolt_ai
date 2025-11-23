@@ -104,18 +104,29 @@ export async function gotoChart(
 }
 
 export async function waitForProbe(page: Page, timeoutMs = 15_000) {
-  await page.waitForFunction(
-    () => {
-      const w = window as any;
-      const hasProbe = !!w.__probe && Object.keys(w.__probe).length > 0;
-      const bootReady =
-        Array.isArray(w.__probeBoot?.stages) &&
-        w.__probeBoot.stages.some((s: any) => s?.stage === 'seed-bars-ready');
-      return hasProbe || bootReady;
-    },
-    undefined,
-    { timeout: timeoutMs, polling: 100 },
-  );
+  try {
+    await page.waitForFunction(
+      () => {
+        const w = window as any;
+        const hasProbe = !!w.__probe && Object.keys(w.__probe).length > 0;
+        const bootReady =
+          Array.isArray(w.__probeBoot?.stages) &&
+          w.__probeBoot.stages.some((s: any) => s?.stage === 'seed-bars-ready');
+        const bootPresent = !!w.__probeBoot;
+        return hasProbe || bootReady || bootPresent;
+      },
+      undefined,
+      { timeout: timeoutMs, polling: 100 },
+    );
+  } catch (error) {
+    try {
+      // Best-effort probe snapshot to aid debugging when readiness never materializes.
+      await debugProbe(page, 'waitForProbe-timeout');
+    } catch {
+      // ignore logging errors
+    }
+    throw error;
+  }
 }
 
 export async function waitForCharts(

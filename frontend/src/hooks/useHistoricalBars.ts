@@ -25,7 +25,7 @@ export function useHistoricalBars(symbol: string, timeframe: string, range = '6M
   const normalizedSymbol = normalizeSymbol(symbol);
   return useQuery<Bar[]>({
     queryKey: ['hist-bars', normalizedSymbol, timeframe, normalizedRange],
-    enabled: isValidSymbol(symbol),
+    enabled: isValidSymbol(normalizedSymbol),
     staleTime: 15_000,
     queryFn: async () => {
       const normalizedTimeframe = timeframe?.trim?.() || '1Day';
