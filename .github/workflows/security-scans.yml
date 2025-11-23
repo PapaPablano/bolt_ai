@@ -1,0 +1,58 @@
+name: security-scans
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: "0 3 * * *" # nightly
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies (root workspace)
+        run: npm ci
+
+      - name: Run npm audit (high severity and above)
+        run: npm audit --audit-level=high
+
+  pip-audit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - backend/api/requirements.txt
+          - backend/app/requirements.txt
+          - backend/agents/requirements.txt
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pip-audit
+
+      - name: Run pip-audit for ${{ matrix.service }}
+        run: pip-audit -r ${{ matrix.service }}

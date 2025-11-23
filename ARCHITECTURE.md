@@ -12,11 +12,13 @@ The project is organized as a monorepo with the following key directories:
 
 ## Dependency Management
 
-Dependencies are managed at two levels:
+Dependencies are managed at two levels, and **npm with a single `package-lock.json`** is the source of truth for JavaScript/TypeScript dependencies:
 
-1.  **Root `package.json`**: This file contains dependencies that are shared across the entire project, primarily for development and scripting purposes. This includes tools like `tsx` for running TypeScript scripts, `eslint` for linting, and `typescript` for compiling.
+1.  **Root `package.json`**: This file contains dependencies that are shared across the entire project, primarily for development and scripting purposes. It also defines the npm workspace for `frontend/`. Tools like `tsx` for running TypeScript scripts, `eslint` for linting, and `typescript` for compiling are declared here.
 
-2.  **`frontend/package.json`**: This file manages all the dependencies for the React frontend application. This includes React itself, as well as UI libraries like `shadcn` and data-fetching libraries like `@tanstack/react-query`.
+2.  **`frontend/package.json`**: This file manages all the dependencies for the React frontend application. This includes React itself, as well as UI libraries like `shadcn` and data-fetching libraries like `@tanstack/react-query`. Versions are locked via the root `package-lock.json`.
+
+Use **npm** (not Yarn) for all JavaScript/TypeScript workflows, and keep only the npm lockfile (`package-lock.json`) checked in to avoid dependency drift between environments.
 
 This separation of dependencies ensures that the frontend and backend environments are kept clean and that each part of the project only has access to the dependencies it needs.
 
