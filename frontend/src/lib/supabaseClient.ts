@@ -1,7 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from './env';
 
-const mode = import.meta.env.MODE;
+const envVars = (import.meta as any).env as { MODE?: string } | undefined;
+const nodeProcess = typeof globalThis !== 'undefined' ? (globalThis as any).process : undefined;
+
+const mode = envVars?.MODE ?? (nodeProcess?.env?.NODE_ENV as string | undefined) ?? 'production';
+const isTestEnv = mode === 'test' || Boolean(nodeProcess?.env?.VITEST);
 const hasSupabaseEnv = Boolean(env.supabaseUrl && env.supabaseAnonKey);
 
 const createMockSupabaseClient = () => ({
@@ -25,7 +29,7 @@ if (hasSupabaseEnv) {
   supabaseClient = createClient(env.supabaseUrl, env.supabaseAnonKey, {
     auth: { persistSession: true, autoRefreshToken: true },
   });
-} else if (mode === 'test') {
+} else if (isTestEnv) {
   supabaseClient = createMockSupabaseClient();
 } else {
   throw new Error('Missing Supabase environment variables');
