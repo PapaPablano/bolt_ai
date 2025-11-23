@@ -83,12 +83,18 @@ export function makeSessionResolver(calendar?: TradingCalendar) {
     let cursor = midnightMs;
     const limit = 32; // plenty to skip multi-day closures
     for (let i = 0; i < limit; i++) {
-      const next = calendar
-        ? calendar.nextTradingMidnight(cursor, direction)
-        : etMidnightUtc(cursor + direction * DAY_MS);
-      const progressed = next !== cursor;
-      cursor = progressed ? next : etMidnightUtc(cursor + direction * DAY_MS);
-      if (!isFullClosure(cursor)) return cursor;
+      let next: number;
+      if (calendar) {
+        next = calendar.nextTradingMidnight(cursor, direction);
+      } else {
+        // Keep advancing by whole days until we land on a non-weekend day.
+        do {
+          cursor = etMidnightUtc(cursor + direction * DAY_MS);
+        } while (WEEKEND.has(toEtParts(cursor).weekday));
+        next = cursor;
+      }
+      if (!isFullClosure(next)) return next;
+      cursor = next;
     }
     return cursor;
   };
