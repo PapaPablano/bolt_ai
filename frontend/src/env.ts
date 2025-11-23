@@ -28,8 +28,8 @@ const fromRuntime = typeof window !== 'undefined' ? coerceBool((window as any)._
 export const env: AppEnv = {
   QA_PROBE: raw.VITE_QA_PROBE === '1' || raw.DEV === true,
   DEFAULT_SYMBOL: (raw.VITE_DEFAULT_SYMBOL as string | undefined) ?? 'AAPL',
-  API_URL: (raw.VITE_API_URL as string | undefined) ?? 'http://localhost:8000',
-  WS_URL: (raw.VITE_WS_URL as string | undefined) ?? 'ws://localhost:8000/ws',
+  API_URL: (raw.VITE_API_URL as string | undefined) ?? 'http://localhost:8001',
+  WS_URL: (raw.VITE_WS_URL as string | undefined) ?? 'ws://localhost:8001/ws',
   CALENDAR_ENABLED: (fromRuntime ?? fromVite) === true,
 };
 

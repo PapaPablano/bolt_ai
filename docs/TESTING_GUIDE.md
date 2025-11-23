@@ -3,7 +3,7 @@
 ## Quick Verification Steps
 
 ### 1. Open Browser Developer Console
-1. Open the app in browser (http://localhost:8080)
+1. Open the app in browser (http://localhost:5173)
 2. Press F12 or Cmd+Option+I (Mac) to open DevTools
 3. Go to Console tab
 4. Clear console (Cmd+K or Ctrl+L)

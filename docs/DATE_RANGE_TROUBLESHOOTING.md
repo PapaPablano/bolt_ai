@@ -170,7 +170,7 @@ Chart displays: `"Nov 7"` (MMM DD)
 ```bash
 npm run dev
 ```
-1. Open http://localhost:8080
+1. Open http://localhost:5173
 2. Open DevTools Console (F12)
 3. Click different date range buttons
 4. Watch for console logs showing data fetching

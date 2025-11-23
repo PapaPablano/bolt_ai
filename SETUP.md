@@ -114,6 +114,21 @@ npm run dev
 
 This will start the frontend development server. Visit `http://localhost:5173` to see the app!
 
+## Local Port Map
+
+Use these canonical ports for local development:
+
+| Service                      | URL / Connection String                                   |
+|-----------------------------|-----------------------------------------------------------|
+| Frontend (Vite dev)         | `http://localhost:5173`                                   |
+| Preview / E2E server        | `http://localhost:5174`                                   |
+| OHLC / Market API (FastAPI) | `http://localhost:8001` and `ws://localhost:8001/ws`      |
+| Agents API                  | `http://localhost:8002`                                   |
+| Supabase (local optional)   | `http://127.0.0.1:54321`                                  |
+| Timescale (local)           | `postgres://postgres:devpass@localhost:54329/ohlc_store`  |
+| Redis (local)               | `redis://localhost:6379/0`                                |
+| Schwab OAuth redirect (dev) | `https://127.0.0.1:8080/callback`                         |
+
 ## Troubleshooting
 
 ### Dependencies Not Installing Completely

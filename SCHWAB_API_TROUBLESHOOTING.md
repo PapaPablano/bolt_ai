@@ -72,7 +72,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const clientId = Deno.env.get('SCHWAB_KEY_ID');
-    const redirectUri = Deno.env.get('SCHWAB_REDIRECT_URI') || 'https://localhost:3000/callback';
+    const redirectUri = Deno.env.get('SCHWAB_REDIRECT_URI') || 'https://127.0.0.1:8080/callback';
     
     if (!clientId) {
       throw new Error('SCHWAB_KEY_ID not configured');
@@ -135,7 +135,7 @@ Deno.serve(async (req: Request) => {
 
     const clientId = Deno.env.get('SCHWAB_KEY_ID');
     const clientSecret = Deno.env.get('SCHWAB_SECRET_KEY');
-    const redirectUri = Deno.env.get('SCHWAB_REDIRECT_URI') || 'https://localhost:3000/callback';
+    const redirectUri = Deno.env.get('SCHWAB_REDIRECT_URI') || 'https://127.0.0.1:8080/callback';
 
     if (!clientId || !clientSecret) {
       throw new Error('SCHWAB_KEY_ID or SCHWAB_SECRET_KEY not configured');
@@ -212,7 +212,7 @@ Deno.serve(async (req: Request) => {
 # Or via CLI:
 supabase secrets set SCHWAB_KEY_ID="your-schwab-app-key"
 supabase secrets set SCHWAB_SECRET_KEY="your-schwab-app-secret"
-supabase secrets set SCHWAB_REDIRECT_URI="https://localhost:3000/callback"
+supabase secrets set SCHWAB_REDIRECT_URI="https://127.0.0.1:8080/callback"
 ```
 
 #### 2. Deploy the New OAuth Functions
@@ -270,7 +270,7 @@ curl -X POST https://your-project.supabase.co/functions/v1/schwab-auth-init \
 1. Visit the `authUrl` from the response
 2. Log in to your Schwab Developer account
 3. Authorize the application
-4. You'll be redirected to: `https://localhost:3000/callback?code=XXXXXX`
+4. You'll be redirected to: `https://127.0.0.1:8080/callback?code=XXXXXX`
 5. Copy the `code` parameter value
 
 #### 6. Exchange Code for Tokens
@@ -351,7 +351,7 @@ The frontend already uses Alpaca by default via `stock-quote` and `stock-histori
 # Required for Schwab API
 SCHWAB_KEY_ID=your_schwab_client_id
 SCHWAB_SECRET_KEY=your_schwab_client_secret
-SCHWAB_REDIRECT_URI=https://localhost:3000/callback  # Or your callback URL
+SCHWAB_REDIRECT_URI=https://127.0.0.1:8080/callback  # Or your callback URL
 
 # Already working (Alpaca)
 ALPACA_KEY_ID=your_alpaca_key

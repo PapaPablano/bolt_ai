@@ -108,7 +108,7 @@ This helps verify the system is working correctly.
 # Start dev server
 npm run dev
 
-# Open http://localhost:8080
+# Open http://localhost:5173
 # Open DevTools Console (F12)
 ```
 

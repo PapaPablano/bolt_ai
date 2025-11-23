@@ -13,7 +13,7 @@ Generates OAuth authorization URL for initial setup.
 ```json
 {
   "authUrl": "https://api.schwabapi.com/v1/oauth/authorize?...",
-  "redirectUri": "https://localhost:3000/callback",
+  "redirectUri": "https://127.0.0.1:8080/callback",
   "instructions": [
     "1. Visit the authUrl in your browser",
     "2. Log in to your Schwab account",
@@ -506,7 +506,7 @@ Required in Supabase secrets:
 ```bash
 SCHWAB_KEY_ID=your_client_id
 SCHWAB_SECRET_KEY=your_client_secret
-SCHWAB_REDIRECT_URI=https://localhost:3000/callback
+SCHWAB_REDIRECT_URI=https://127.0.0.1:8080/callback
 ```
 
 ## Rate Limits
