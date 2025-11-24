@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { gotoChart, waitForCharts, readProbeCounts, resetClientState, debugTrackedProbePages, clearTrackedProbePages } from './utils';
 
-test.afterEach(async ({ page }, testInfo) => {
+test.afterEach(async (_ctx, testInfo) => {
   if (testInfo.status !== testInfo.expectedStatus) {
     await debugTrackedProbePages(testInfo.title);
   }
