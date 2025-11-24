@@ -12,9 +12,11 @@ concurrency:
 jobs:
   test-and-e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      CI: true
 
     steps:
       - name: Checkout
@@ -28,27 +30,33 @@ jobs:
 
       - name: Install dependencies (workspace root)
         run: npm ci
+        timeout-minutes: 5
 
       - name: Lint and typecheck
         run: npm run lint
+        timeout-minutes: 5
 
       - name: Build frontend
         run: npm run build
+        timeout-minutes: 5
 
       - name: Install Playwright browsers
         working-directory: frontend
-        run: npx playwright install --with-deps
+        run: npx playwright install --with-deps chromium
+        timeout-minutes: 10
 
       - name: Unit tests (Vitest)
         working-directory: frontend
         run: npm run test
+        timeout-minutes: 5
 
       - name: E2E tests (Playwright)
         working-directory: frontend
         run: npm run e2e:ci
+        timeout-minutes: 15
 
       - name: Upload Playwright report
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
@@ -59,6 +67,7 @@ jobs:
     name: Deploy to Vercel
     needs: test-and-e2e
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     defaults:
       run:
@@ -75,9 +84,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        timeout-minutes: 5
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
+        timeout-minutes: 5
 
       - name: Pull Vercel environment
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
@@ -87,9 +98,11 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+        timeout-minutes: 5
 
       - name: Deploy to Vercel (production)
         run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
+        timeout-minutes: 10
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

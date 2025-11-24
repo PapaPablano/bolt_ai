@@ -7,6 +7,11 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     passWithNoTests: false,
+    watch: false,
+    testTimeout: 10000,
+    hookTimeout: 10000,
+    reporters: process.env.CI ? ['verbose', 'github-actions'] : ['verbose'],
+    bail: process.env.CI ? 1 : 0,
     coverage: {
       provider: 'istanbul',
       reporter: ['text', 'html'],

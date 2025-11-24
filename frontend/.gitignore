@@ -18,5 +18,8 @@ yarn-error.log*
 # Test and tooling outputs
 coverage/
 playwright-report/
+test-results/
+playwright/.cache/
 .vitest/
 .vercel
+vitest.config.ts.timestamp-*
