@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { normalizeBarsPayload } from '@/lib/bars';
-import { fetchOHLC, buildRangeBounds } from '@/lib/api/ohlc';
 import { isValidSymbol, normalizeSymbol } from '@/lib/symbols';
+import { fetchHistoricalData } from '@/lib/api';
 import type { Bar } from '@/types/bars';
 
 const normalizeRange = (range?: string) => {
@@ -28,10 +27,9 @@ export function useHistoricalBars(symbol: string, timeframe: string, range = '6M
     enabled: isValidSymbol(normalizedSymbol),
     staleTime: 15_000,
     queryFn: async () => {
-      const normalizedTimeframe = timeframe?.trim?.() || '1Day';
-      const params = buildRangeBounds(normalizedTimeframe, normalizedRange);
-      const bars = await fetchOHLC(normalizedSymbol, params.tf, params.startMs, params.endMs);
-      return normalizeBarsPayload({ bars });
+      // fetchHistoricalData handles symbol validation and range → Supabase mapping,
+      // and ultimately calls the stock-historical-v3 Edge Function.
+      return fetchHistoricalData(normalizedSymbol, normalizedRange);
     },
   });
 }

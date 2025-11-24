@@ -14,6 +14,7 @@ import { InternalLink } from '../components/InternalLink';
 const AdvancedCandleChart = lazy(() => import('../components/AdvancedCandleChart'));
 import { useHistoricalBars } from '@/hooks/useHistoricalBars';
 import { useChartPrefs } from '@/hooks/useChartPrefs';
+import { supabase } from '../lib/supabase';
 
 const DEFAULT_SYMBOLS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA'];
 
@@ -37,6 +38,9 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
   const [isLoadingChart, setIsLoadingChart] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
   const [forceChartRender, setForceChartRender] = useState(false);
+  const [smokeResult, setSmokeResult] = useState<unknown | null>(null);
+  const [smokeError, setSmokeError] = useState<string | null>(null);
+  const [smokeLoading, setSmokeLoading] = useState(false);
   const announce = useAnnouncement();
   const { prefs, loading: prefsLoading } = useChartPrefs();
   const tf = prefs.default_timeframe;
@@ -48,6 +52,49 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
     const sp = new URLSearchParams(window.location.search);
     setForceChartRender(sp.get('mock') === '1');
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const runSmokeTest = async () => {
+      setSmokeLoading(true);
+      setSmokeError(null);
+
+      try {
+        const { data, error } = await (supabase as any).functions.invoke('stock-quote', {
+          body: { symbol: selectedSymbol || 'AAPL' },
+        });
+
+        if (cancelled) return;
+
+        if (error) {
+          console.error('SupabaseSmokePanel stock-quote error', error);
+          const message = error instanceof Error ? error.message : String(error);
+          setSmokeError(message);
+          setSmokeResult(null);
+        } else {
+          setSmokeResult(data ?? null);
+          setSmokeError(null);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.error('SupabaseSmokePanel unexpected error', err);
+        const message = err instanceof Error ? err.message : String(err);
+        setSmokeError(message);
+        setSmokeResult(null);
+      } finally {
+        if (!cancelled) {
+          setSmokeLoading(false);
+        }
+      }
+    };
+
+    runSmokeTest();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSymbol]);
 
   useEffect(() => {
     const loadWatchlist = async () => {
@@ -147,6 +194,27 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
 
   return (
     <>
+      <section
+        aria-label="Supabase connectivity smoke test"
+        className="mb-6 rounded-lg border border-dashed border-slate-700 bg-slate-900/60 p-4 text-xs text-slate-300"
+      >
+        <h2 className="mb-2 font-semibold text-slate-100">SupabaseSmokePanel (stock-quote)</h2>
+        {smokeLoading && <div>Loading stock-quote from Supabase...</div>}
+        {!smokeLoading && smokeError && (
+          <pre className="whitespace-pre-wrap break-words text-red-300">
+            ERROR: {smokeError}
+          </pre>
+        )}
+        {!smokeLoading && !smokeError && smokeResult != null && (
+          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words">
+            {JSON.stringify(smokeResult, null, 2)}
+          </pre>
+        )}
+        {!smokeLoading && !smokeError && !smokeResult && (
+          <div className="text-slate-400">No response received yet.</div>
+        )}
+      </section>
+
       <section id="watchlist" className="mb-6" aria-label="Stock watchlist">
         <h2 className="text-lg font-semibold text-slate-300 mb-4">Watchlist</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">

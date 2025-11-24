@@ -2,8 +2,25 @@ import { env } from '../env';
 import { normalizeBarsPayload } from '../bars';
 import { supabase } from '../supabase';
 import { isValidSymbol, normalizeSymbol } from '../symbols';
-import { buildRangeBounds, fetchOHLC, windowFromDays } from './ohlc';
 import { api } from '../api-client';
+
+const STOCK_HISTORICAL_RANGE_MAP: Record<string, string> = {
+  '1D': '1d',
+  '5D': '5d',
+  '1M': '1mo',
+  '3M': '3mo',
+  '6M': '6mo',
+  '1Y': '1y',
+  '2Y': '5y',
+  '5Y': '5y',
+  '10Y': '5y',
+  MAX: '5y',
+};
+
+const toStockHistoricalRange = (range?: string): string => {
+  const key = range?.toUpperCase?.() ?? '1M';
+  return STOCK_HISTORICAL_RANGE_MAP[key] ?? '6mo';
+};
 
 export interface StockQuote {
   symbol: string;
@@ -28,7 +45,7 @@ export interface BarData {
 
 export async function fetchStockQuote(symbol: string): Promise<StockQuote> {
   const quoteFunction = env.quoteFunction || 'stock-quote';
-  const { data, error } = await supabase.functions.invoke(quoteFunction, {
+  const { data, error } = await (supabase as any).functions.invoke(quoteFunction, {
     body: { symbol }
   });
 
@@ -42,20 +59,20 @@ export async function fetchHistoricalData(symbol: string, range: string = '1D'):
     throw new Error('Invalid symbol');
   }
 
-  const upper = range.toUpperCase();
-  const nowMs = Date.now();
-  let params: ReturnType<typeof buildRangeBounds>;
+  const supabaseRange = toStockHistoricalRange(range);
 
-  if (upper === '1D') {
-    params = windowFromDays('5Min', 2, nowMs);
-  } else if (upper === '5D') {
-    params = windowFromDays('15Min', 7, nowMs);
-  } else {
-    params = buildRangeBounds('1Day', upper, nowMs);
-  }
+  const { data, error } = await (supabase as any).functions.invoke('stock-historical-v3', {
+    body: {
+      symbol: normalizedSymbol,
+      range: supabaseRange,
+      instrumentType: 'equity',
+    },
+  });
 
-  const bars = await fetchOHLC(normalizedSymbol, params.tf, params.startMs, params.endMs);
-  return normalizeBarsPayload({ bars });
+  if (error) throw error;
+
+  const payload = (data as { data?: unknown })?.data ?? data;
+  return normalizeBarsPayload(payload) as BarData[];
 }
 
 interface SchwabQuote {
