@@ -63,23 +63,6 @@ jobs:
           path: frontend/playwright-report
           retention-days: 7
 
- it('moves post-close to next trading day 09:30 ET', () => {
-  const t = msUtc(2024, 7, 8, 21, 30, 0);
-  const midnight = etMidnightUtc(t);
-  const open = midnight + OPEN_OFFSET_MS;
-  const close = midnight + CLOSE_OFFSET_MS;
-
-  console.log('DEBUG resolveSessionOpenMs', {
-    t: new Date(t).toISOString(),
-    midnightIso: new Date(midnight).toISOString(),
-    openIso: new Date(open).toISOString(),
-    closeIso: new Date(close).toISOString(),
-  });
-
-  const resolved = resolveSessionOpenMs(t);
-  expect(resolved).toBe(msUtc(2024, 7, 9, 13, 30, 0));
-});
-
   deploy:
     name: Deploy to Vercel
     needs: test-and-e2e
