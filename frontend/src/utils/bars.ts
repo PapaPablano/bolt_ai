@@ -1,40 +1,73 @@
-import { alignNYSEBucketStartUtcSec, bucketSec } from '@/utils/nyseTime';
-import type { TF } from '@/types/prefs';
+import React, { useEffect, useRef } from 'react';
+import { createChart, IChartApi, ISeriesApi, BarData } from 'lightweight-charts';
 
-export type Bar = { time: number; open: number; high: number; low: number; close: number; volume?: number };
+// Ensure data is strictly ascending by time before passing to lightweight-charts.
+// Instead of throwing on duplicates/out-of-order timestamps, we defensively
+// sanitize the series so the chart continues to render.
+function sanitizeAscendingTimes<T extends { time: number; high?: number; low?: number; close?: number; volume?: number }>(
+  data: T[],
+): T[] {
+  if (!Array.isArray(data) || data.length === 0) return [];
 
-/** Sort, align to NYSE buckets, dedupe same-bucket bars by merging O/H/L/C, and optionally fill holes. */
-export function normalizeHistoricalBars(raw: Bar[], tf: TF): Bar[] {
-  if (!raw?.length) return [];
-  const step = bucketSec(tf);
-  const src = [...raw].sort((a, b) => a.time - b.time);
-  const out: Bar[] = [];
-  let lastT = -1;
+  // Sort by time in case callers provide unsorted arrays.
+  const sorted = [...data].sort((a, b) => a.time - b.time);
+  const out: T[] = [];
+  let lastTime = Number.NEGATIVE_INFINITY;
 
-  for (const b of src) {
-    const t = alignNYSEBucketStartUtcSec(b.time, tf);
-
-    if (out.length && t === lastT) {
+  for (const bar of sorted) {
+    if (bar.time <= lastTime) {
+      // Duplicate/backwards time: merge into previous bar if OHLC present,
+      // otherwise skip this bar.
       const prev = out[out.length - 1];
-      prev.high = Math.max(prev.high, b.high);
-      prev.low = Math.min(prev.low, b.low);
-      prev.close = b.close;
-      prev.volume = (prev.volume ?? 0) + (b.volume ?? 0);
+      if (prev && typeof prev.high === 'number' && typeof prev.low === 'number' && typeof prev.close === 'number') {
+        if (typeof bar.high === 'number') prev.high = Math.max(prev.high, bar.high);
+        if (typeof bar.low === 'number') prev.low = Math.min(prev.low, bar.low);
+        if (typeof bar.close === 'number') prev.close = bar.close;
+        if (typeof bar.volume === 'number') {
+          prev.volume = (prev.volume ?? 0) + bar.volume;
+        }
+      }
       continue;
     }
-
-    if (lastT > 0 && t > lastT + step && out.length) {
-      let fill = lastT + step;
-      const prev = out[out.length - 1];
-      while (fill < t) {
-        out.push({ time: fill, open: prev.close, high: prev.close, low: prev.close, close: prev.close, volume: 0 });
-        fill += step;
-      }
-    }
-
-    out.push({ time: t, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume });
-    lastT = t;
+    out.push(bar);
+    lastTime = bar.time;
   }
 
   return out;
+}
+
+type AdvancedCandleChartProps = {
+  bars: BarData[];
+};
+
+export function AdvancedCandleChart({ bars }: AdvancedCandleChartProps) {
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+
+  useEffect(() => {
+    if (!chartContainerRef.current) return;
+
+    chartRef.current = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: chartContainerRef.current.clientHeight,
+    });
+
+    seriesRef.current = chartRef.current.addCandlestickSeries();
+
+    return () => {
+      chartRef.current?.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!seriesRef.current) return;
+
+    const safeBars = sanitizeAscendingTimes(bars);
+    seriesRef.current.setData(safeBars);
+  }, [bars]);
+
+  return <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />;
 }

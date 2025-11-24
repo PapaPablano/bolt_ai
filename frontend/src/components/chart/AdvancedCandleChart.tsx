@@ -880,7 +880,17 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       close: b.close,
       volume: b.volume ?? 0,
     });
-    const normalized = normalizeHistoricalBars(cleaned.map(toChartBar), tf);
+
+    // Normalize and then enforce strictly ascending, unique timestamps.
+    let normalized = normalizeHistoricalBars(cleaned.map(toChartBar), tf);
+    const byTime = new Map<number, ChartBar>();
+    for (const bar of normalized) {
+      if (bar == null || !Number.isFinite(bar.time)) continue;
+      // Last bar for a given timestamp wins.
+      byTime.set(bar.time, bar);
+    }
+    normalized = Array.from(byTime.values()).sort((a, b) => a.time - b.time);
+
     seedBarsRef.current = normalized;
     if (qaProbeEnabled && normalized.length) recordStage('seed-bars-ready');
     setSeedBarsVersion((prev) => prev + 1);

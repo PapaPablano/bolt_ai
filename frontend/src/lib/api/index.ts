@@ -72,7 +72,20 @@ export async function fetchHistoricalData(symbol: string, range: string = '1D'):
   if (error) throw error;
 
   const payload = (data as { data?: unknown })?.data ?? data;
-  return normalizeBarsPayload(payload) as BarData[];
+  const raw = normalizeBarsPayload(payload) as BarData[];
+
+  // Guard: ensure strictly ascending, deduplicated time values before passing to the chart.
+  const byTime = new Map<string, BarData>();
+  for (const bar of raw) {
+    if (!bar?.time) continue;
+    byTime.set(bar.time, bar);
+  }
+
+  const sorted = Array.from(byTime.values()).sort(
+    (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime(),
+  );
+
+  return sorted;
 }
 
 interface SchwabQuote {
@@ -81,7 +94,7 @@ interface SchwabQuote {
 }
 
 export async function fetchSchwabQuotes(symbols: string[]): Promise<SchwabQuote[]> {
-  const { data, error } = await supabase.functions.invoke('schwab-quote', {
+  const { data, error } = await (supabase as any).functions.invoke('schwab-quote', {
     body: { symbols }
   });
 
@@ -100,7 +113,7 @@ export async function fetchSchwabHistoricalData(
     endDate?: number;
   } = {}
 ): Promise<BarData[]> {
-  const { data, error } = await supabase.functions.invoke('schwab-historical', {
+  const { data, error } = await (supabase as any).functions.invoke('schwab-historical', {
     body: { symbol, ...params }
   });
 
