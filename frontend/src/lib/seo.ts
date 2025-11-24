@@ -254,8 +254,11 @@ export function getCanonicalUrl(path: string): string {
   return `${baseUrl}${path}`;
 }
 
-export function generateStructuredData(type: 'Organization' | 'WebApplication' | 'BreadcrumbList', data: any) {
-  const schemas: Record<string, any> = {
+export function generateStructuredData(
+  type: 'Organization' | 'WebApplication' | 'BreadcrumbList',
+  data: Record<string, unknown>,
+): string {
+  const schemas: Record<'Organization' | 'WebApplication' | 'BreadcrumbList', Record<string, unknown>> = {
     Organization: {
       '@context': 'https://schema.org',
       '@type': 'Organization',
@@ -280,7 +283,8 @@ export function generateStructuredData(type: 'Organization' | 'WebApplication' |
         'priceCurrency': 'USD'
       },
       'operatingSystem': 'Any'
-    }
+    },
+    BreadcrumbList: {},
   };
 
   return JSON.stringify({ ...schemas[type], ...data });

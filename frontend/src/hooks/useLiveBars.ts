@@ -40,15 +40,15 @@ export function useLiveBars(symbol: string, timeframe: TF, opts: LiveOptions = {
   const [bar, setBar] = useState<Bar | null>(null);
   const throttleRef = useRef<number | null>(null);
 
-  const emit = (b: Bar) => {
-    if (throttleRef.current) window.clearTimeout(throttleRef.current);
-    const throttle = opts.throttleMs ?? DEFAULTS.throttleMs;
-    throttleRef.current = window.setTimeout(() => setBar(b), throttle) as unknown as number;
-  };
-
   useEffect(() => {
     setBar(null);
     if (opts.enabled === false) return;
+
+    const emit = (b: Bar) => {
+      if (throttleRef.current) window.clearTimeout(throttleRef.current);
+      const throttle = opts.throttleMs ?? DEFAULTS.throttleMs;
+      throttleRef.current = window.setTimeout(() => setBar(b), throttle) as unknown as number;
+    };
 
     const startPolling = () => {
       let current: Bar | null = null;

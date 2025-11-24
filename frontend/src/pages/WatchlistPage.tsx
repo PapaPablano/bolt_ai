@@ -141,7 +141,10 @@ export function WatchlistPage({ onSymbolSelect }: WatchlistPageProps) {
   }, [selectedWatchlistId, watchlists]);
 
   const selectedWatchlist = watchlists.find((watchlist) => watchlist.id === selectedWatchlistId);
-  const activeItems = selectedWatchlist?.watchlist_items ?? [];
+  const activeItems = useMemo(
+    () => selectedWatchlist?.watchlist_items ?? [],
+    [selectedWatchlist],
+  );
   const watchlistSymbols = activeItems.map((item) => item.symbol);
 
   const movers = useMemo(() => {

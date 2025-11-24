@@ -45,12 +45,16 @@ export interface BarData {
 
 export async function fetchStockQuote(symbol: string): Promise<StockQuote> {
   const quoteFunction = env.quoteFunction || 'stock-quote';
-  const { data, error } = await (supabase as any).functions.invoke(quoteFunction, {
-    body: { symbol }
+  const { data, error } = await (supabase as unknown as {
+    functions: {
+      invoke: (name: string, args: { body?: unknown }) => Promise<{ data: unknown; error: unknown }>;
+    };
+  }).functions.invoke(quoteFunction, {
+    body: { symbol },
   });
 
   if (error) throw error;
-  return data;
+  return data as StockQuote;
 }
 
 export async function fetchHistoricalData(symbol: string, range: string = '1D'): Promise<BarData[]> {
@@ -61,7 +65,11 @@ export async function fetchHistoricalData(symbol: string, range: string = '1D'):
 
   const supabaseRange = toStockHistoricalRange(range);
 
-  const { data, error } = await (supabase as any).functions.invoke('stock-historical-v3', {
+  const { data, error } = await (supabase as unknown as {
+    functions: {
+      invoke: (name: string, args: { body?: unknown }) => Promise<{ data: unknown; error: unknown }>;
+    };
+  }).functions.invoke('stock-historical-v3', {
     body: {
       symbol: normalizedSymbol,
       range: supabaseRange,
@@ -94,12 +102,17 @@ interface SchwabQuote {
 }
 
 export async function fetchSchwabQuotes(symbols: string[]): Promise<SchwabQuote[]> {
-  const { data, error } = await (supabase as any).functions.invoke('schwab-quote', {
-    body: { symbols }
+  const { data, error } = await (supabase as unknown as {
+    functions: {
+      invoke: (name: string, args: { body?: unknown }) => Promise<{ data: unknown; error: unknown }>;
+    };
+  }).functions.invoke('schwab-quote', {
+    body: { symbols },
   });
 
   if (error) throw error;
-  return data.quotes || [];
+  const payload = data as { quotes?: SchwabQuote[] } | null;
+  return payload?.quotes ?? [];
 }
 
 export async function fetchSchwabHistoricalData(
@@ -113,8 +126,12 @@ export async function fetchSchwabHistoricalData(
     endDate?: number;
   } = {}
 ): Promise<BarData[]> {
-  const { data, error } = await (supabase as any).functions.invoke('schwab-historical', {
-    body: { symbol, ...params }
+  const { data, error } = await (supabase as unknown as {
+    functions: {
+      invoke: (name: string, args: { body?: unknown }) => Promise<{ data: unknown; error: unknown }>;
+    };
+  }).functions.invoke('schwab-historical', {
+    body: { symbol, ...params },
   });
 
   if (error) throw error;
@@ -128,7 +145,9 @@ export async function fetchSchwabHistoricalData(
     volume: number;
   }
 
-  return (data.candles || []).map((candle: SchwabCandle) => ({
+  const candles = (data as { candles?: SchwabCandle[] } | null)?.candles ?? [];
+
+  return candles.map((candle: SchwabCandle) => ({
     time: new Date(candle.datetime).toISOString(),
     open: candle.open,
     high: candle.high,

@@ -1,8 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from './env';
 
-const envVars = (import.meta as any).env as { MODE?: string } | undefined;
-const nodeProcess = typeof globalThis !== 'undefined' ? (globalThis as any).process : undefined;
+const envVars = (import.meta as unknown as { env?: { MODE?: string } }).env;
+const nodeProcess =
+  typeof globalThis !== 'undefined'
+    ? (globalThis as { process?: { env?: { NODE_ENV?: string; VITEST?: string } } }).process
+    : undefined;
 
 const mode = envVars?.MODE ?? (nodeProcess?.env?.NODE_ENV as string | undefined) ?? 'production';
 const isTestEnv = mode === 'test' || Boolean(nodeProcess?.env?.VITEST);

@@ -23,7 +23,10 @@ const coerceBool = (value: BoolLike): boolean | undefined => {
 };
 
 const fromVite = coerceBool(raw.VITE_CALENDAR_ENABLED as BoolLike);
-const fromRuntime = typeof window !== 'undefined' ? coerceBool((window as any).__config?.CALENDAR_ENABLED) : undefined;
+const fromRuntime =
+  typeof window !== 'undefined'
+    ? coerceBool((window as unknown as { __config?: { CALENDAR_ENABLED?: BoolLike } }).__config?.CALENDAR_ENABLED)
+    : undefined;
 
 export const env: AppEnv = {
   QA_PROBE: raw.VITE_QA_PROBE === '1' || raw.DEV === true,
@@ -42,7 +45,6 @@ if (raw.DEV) {
   if (!raw.VITE_CALENDAR_ENABLED) missing.push('VITE_CALENDAR_ENABLED');
 
   if (missing.length) {
-    // eslint-disable-next-line no-console
     console.warn(
       `[env] Missing ${missing.join(
         ', ',

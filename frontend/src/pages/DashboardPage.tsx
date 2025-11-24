@@ -61,7 +61,11 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
       setSmokeError(null);
 
       try {
-        const { data, error } = await (supabase as any).functions.invoke('stock-quote', {
+        const { data, error } = await (supabase as unknown as {
+          functions: {
+            invoke: (name: string, args: { body?: unknown }) => Promise<{ data: unknown; error: unknown }>;
+          };
+        }).functions.invoke('stock-quote', {
           body: { symbol: selectedSymbol || 'AAPL' },
         });
 

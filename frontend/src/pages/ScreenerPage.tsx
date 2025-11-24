@@ -29,6 +29,23 @@ interface ScreenerRun {
   results: ScreenerResult[];
 }
 
+interface StockCacheRow {
+  id: string;
+  cache_key: string;
+  last_updated: string;
+  data?: {
+    filters?: ScreenerFilters;
+    results?: ScreenerResult[];
+  };
+}
+
+interface StockSearchResultRow {
+  symbol: string;
+  name: string;
+  exchange?: string;
+  instrumentType?: string;
+}
+
 const INITIAL_FILTERS: ScreenerFilters = {
   sector: 'technology',
   marketCap: 'large',
@@ -68,7 +85,7 @@ export function ScreenerPage() {
       return;
     }
 
-    const mapped: ScreenerRun[] = (data ?? []).map((row: any) => ({
+    const mapped: ScreenerRun[] = (data ?? []).map((row: StockCacheRow) => ({
       id: row.id,
       cacheKey: row.cache_key,
       lastUpdated: row.last_updated,
@@ -114,7 +131,7 @@ export function ScreenerPage() {
 
       if (error) throw error;
 
-      const apiResults: ScreenerResult[] = (data?.results ?? []).map((result: any) => ({
+      const apiResults: ScreenerResult[] = (data?.results ?? []).map((result: StockSearchResultRow) => ({
         symbol: result.symbol,
         name: result.name,
         exchange: result.exchange,

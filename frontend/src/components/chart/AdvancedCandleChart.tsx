@@ -83,10 +83,13 @@ const rangeToMinutes = (value: Range | string): number => {
   }
 };
 export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initialRange = '1Y', height = 520 }: Props) {
+  type QaProbeWindow = typeof window & { __QA_PROBE__?: string };
   const qaProbeEnabled =
     import.meta.env.DEV ||
     import.meta.env.VITE_QA_PROBE === '1' ||
-    (typeof window !== 'undefined' && ((window as any).__QA_PROBE__ === '1' || new URLSearchParams(window.location.search).get('probe') === '1'));
+    (typeof window !== 'undefined' &&
+      ((window as QaProbeWindow).__QA_PROBE__ === '1' ||
+        new URLSearchParams(window.location.search).get('probe') === '1'));
   const [{ mockMode, mockSeed, mockEnd }] = useState(() => {
     if (typeof window === 'undefined') return { mockMode: false, mockSeed: 1337, mockEnd: Date.now() };
     try {
@@ -163,7 +166,6 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
 
   if (qaProbeEnabled) {
     try {
-      // eslint-disable-next-line no-console
       console.info('[qa-probe] render', {
         DEV: import.meta.env.DEV,
         QA: import.meta.env.VITE_QA_PROBE === '1',
@@ -208,7 +210,10 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       stageRef.current = stage;
       if (!qaProbeEnabled || typeof window === 'undefined') return;
       try {
-        const boot = (window as any).__probeBoot;
+        type ProbeBootWindow = typeof window & {
+          __probeBoot?: { stages?: { stage: BootStage; ts: number }[] };
+        };
+        const boot = (window as ProbeBootWindow).__probeBoot;
         if (boot?.stages?.push) {
           boot.stages.push({ stage, ts: Date.now() });
           if (boot.stages.length > 50) boot.stages.splice(0, boot.stages.length - 50);
@@ -388,7 +393,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       pushWindowToWorker(targetRange, WORKER_VISIBLE_POINT_CAP);
       if (targetRange) initialWindowSentRef.current = true;
     },
-    [indicatorWorker, pushWindowToWorker, tf],
+    [pushWindowToWorker, tf],
   );
 
     const stPanelDefaults = useMemo(() => buildStPerfParams(preset), [preset]);
@@ -551,7 +556,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
 
   const clearCalendarMarkers = useCallback(() => {
     try {
-      candleRef.current?.setMarkers?.([] as any);
+      candleRef.current?.setMarkers?.([]);
     } catch {
       /* noop */
     }
@@ -855,6 +860,8 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     preset.useSTPerf,
     preset.useVWAP,
     preset.stPerfUseAMA,
+    qaProbeEnabled,
+    recordStage,
     tf,
   ]);
 
@@ -882,7 +889,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     });
 
     // Normalize and then enforce strictly ascending, unique timestamps.
-    let normalized = normalizeHistoricalBars(cleaned.map(toChartBar), tf);
+    let normalized = normalizeHistoricalBars(cleaned.map(toChartBar));
     const byTime = new Map<number, ChartBar>();
     for (const bar of normalized) {
       if (bar == null || !Number.isFinite(bar.time)) continue;
@@ -916,7 +923,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     chartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
     macdChartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
     rsiChartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
-  }, [applyVisibleDecimation, bars, indicatorWorker, preset, tf]);
+  }, [applyVisibleDecimation, bars, indicatorWorker, preset, pushWindowToWorker, qaProbeEnabled, recordStage, tf]);
 
   useEffect(() => {
     lastTimeSecRef.current = null;
@@ -1007,9 +1014,11 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       calendarAbortRef.current = null;
     };
   }, [
+    calendarCountries,
     calendarCountriesKey,
     calendarEnabled,
     calendarMinImpact,
+    clearCalendarMarkers,
     seedBarsVersion,
     symbol,
     tf,
@@ -1130,9 +1139,18 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   // QA probe (namespaced by symbol) available in dev and flagged preview builds
   useEffect(() => {
     if (!qaProbeEnabled) return;
-    const w = window as any;
+    type ProbeRoot = Record<string, unknown>;
+    type ProbeGlobal = typeof window & {
+      __probe?: Record<string, ProbeRoot>;
+      __probeBoot?: {
+        mounted?: { symbol: string; ts: number }[];
+        unmounted?: { symbol: string; ts: number }[];
+      };
+    };
+
+    const w = window as ProbeGlobal;
     const root = (w.__probe ??= {});
-    const entry = (root[symbol] ??= {});
+    const entry = (root[symbol] ??= {} as ProbeRoot);
 
     Object.defineProperties(entry, {
       macdBarSpacing: {
@@ -1213,8 +1231,8 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         value: (bounds: { from: number; to: number } | null) => {
           const chart = chartRef.current;
           if (!chart || !bounds) return null;
-          const range = { from: toChartTime(bounds.from), to: toChartTime(bounds.to) };
-          chart.timeScale().setVisibleRange(range as any);
+          const range = { from: toChartTime(bounds.from), to: toChartTime(bounds.to) } as const;
+          chart.timeScale().setVisibleRange(range as unknown as { from: Time; to: Time });
           return bounds;
         },
       },
@@ -1236,7 +1254,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     });
 
     try {
-      const boot = (window as any).__probeBoot;
+      const boot = w.__probeBoot;
       if (boot?.mounted?.push) {
         boot.mounted.push({ symbol, ts: Date.now() });
         if (boot.mounted.length > 20) boot.mounted.splice(0, boot.mounted.length - 20);
@@ -1247,7 +1265,6 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
 
     if (import.meta.env.DEV) {
       try {
-        // eslint-disable-next-line no-console
         console.debug('[qa-probe] mounted', { symbol, namespaces: Object.keys(root) });
       } catch {
         /* noop */
@@ -1255,12 +1272,12 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     }
 
     return () => {
-      const r = (window as any).__probe;
+      const r = w.__probe;
       if (!r) return;
       if (r[symbol]) delete r[symbol];
-      if (!Object.keys(r).length) delete (window as any).__probe;
+      if (!Object.keys(r).length) delete w.__probe;
       try {
-        const boot = (window as any).__probeBoot;
+        const boot = w.__probeBoot;
         if (boot?.unmounted?.push) {
           boot.unmounted.push({ symbol, ts: Date.now() });
           if (boot.unmounted.length > 20) boot.unmounted.splice(0, boot.unmounted.length - 20);
@@ -1271,7 +1288,6 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
 
       if (import.meta.env.DEV) {
         try {
-          // eslint-disable-next-line no-console
           console.debug('[qa-probe] unmounted', { symbol });
         } catch {
           /* noop */

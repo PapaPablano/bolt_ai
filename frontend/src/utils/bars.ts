@@ -1,5 +1,3 @@
-import type { TF } from '@/types/prefs';
-
 // Core bar shape used by AdvancedCandleChart (numeric seconds since epoch).
 export type Bar = {
   time: number;
@@ -21,7 +19,7 @@ export type Bar = {
  * More advanced bucket alignment and gap-filling is handled upstream (preprocessOhlcv),
  * so this function is intentionally conservative.
  */
-export function normalizeHistoricalBars(raw: Bar[], _tf: TF): Bar[] {
+export function normalizeHistoricalBars(raw: Bar[]): Bar[] {
   if (!raw?.length) return [];
 
   const sorted = [...raw].sort((a, b) => a.time - b.time);

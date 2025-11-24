@@ -20,6 +20,13 @@ export class PWAManager {
   private registration: ServiceWorkerRegistration | null = null;
   private updateCallbacks: Set<PWAUpdateCallback> = new Set();
 
+  private static readonly networkDefaults: {
+    effectiveType?: string;
+    downlink?: number;
+    rtt?: number;
+    saveData?: boolean;
+  } = {};
+
   constructor() {
     this.init();
   }
@@ -204,7 +211,8 @@ export class PWAManager {
       return true;
     }
 
-    if ((window.navigator as any).standalone === true) {
+    const nav = window.navigator as Navigator & { standalone?: boolean };
+    if (nav.standalone === true) {
       return true;
     }
 
@@ -265,7 +273,10 @@ export class PWAManager {
     }
 
     try {
-      await (this.registration as any).sync.register(tag);
+      const reg = this.registration as ServiceWorkerRegistration & {
+        sync: { register: (tag: string) => Promise<void> };
+      };
+      await reg.sync.register(tag);
       console.log('[PWA] Background sync registered:', tag);
     } catch (error) {
       console.error('[PWA] Background sync registration failed:', error);
@@ -279,9 +290,17 @@ export class PWAManager {
     rtt?: number;
     saveData?: boolean;
   } {
-    const connection = (navigator as any).connection ||
-                      (navigator as any).mozConnection ||
-                      (navigator as any).webkitConnection;
+    type NetworkInfoLike = typeof PWAManager.networkDefaults;
+    const connectionSource = navigator as Navigator & {
+      connection?: NetworkInfoLike;
+      mozConnection?: NetworkInfoLike;
+      webkitConnection?: NetworkInfoLike;
+    };
+
+    const connection: NetworkInfoLike | undefined =
+      connectionSource.connection ??
+      connectionSource.mozConnection ??
+      connectionSource.webkitConnection;
 
     return {
       online: navigator.onLine,

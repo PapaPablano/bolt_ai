@@ -36,30 +36,29 @@ export function ComparisonWorkbench({
 
   useEffect(() => {
     if (comparisonDisabled) return;
-    loadData(symbols);
+    const run = async () => {
+      setIsLoading(true);
+      try {
+        const dataPromises = symbols.map(async (symbol, index) => {
+          const bars = await fetchHistoricalData(symbol, '6M');
+          return {
+            symbol,
+            data: bars.map((bar) => ({ time: bar.time, close: bar.close })),
+            color: CHART_COLORS[index % CHART_COLORS.length],
+          };
+        });
+
+        const results = await Promise.all(dataPromises);
+        setDatasets(results);
+      } catch (error) {
+        console.error('Error loading comparison data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void run();
   }, [comparisonDisabled, symbols]);
-
-  const loadData = async (currentSymbols: string[]) => {
-    if (comparisonDisabled) return;
-    setIsLoading(true);
-    try {
-      const dataPromises = currentSymbols.map(async (symbol, index) => {
-        const bars = await fetchHistoricalData(symbol, '6M');
-        return {
-          symbol,
-          data: bars.map(bar => ({ time: bar.time, close: bar.close })),
-          color: CHART_COLORS[index % CHART_COLORS.length],
-        };
-      });
-
-      const results = await Promise.all(dataPromises);
-      setDatasets(results);
-    } catch (error) {
-      console.error('Error loading comparison data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleAddSymbol = (symbol: string) => {
     const normalized = symbol.toUpperCase();

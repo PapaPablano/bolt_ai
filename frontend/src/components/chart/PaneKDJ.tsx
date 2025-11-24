@@ -64,17 +64,17 @@ export default function PaneKDJ({
     });
 
     kRef.current = chart.addLineSeries({
-      lineWidth: clampWidth(lineWidths?.k),
+      lineWidth: clampWidth(),
       priceLineVisible: false,
       color: LINE_STYLES.k.color,
     });
     dRef.current = chart.addLineSeries({
-      lineWidth: clampWidth(lineWidths?.d),
+      lineWidth: clampWidth(),
       priceLineVisible: false,
       color: LINE_STYLES.d.color,
     });
     jRef.current = chart.addLineSeries({
-      lineWidth: clampWidth(lineWidths?.j),
+      lineWidth: clampWidth(),
       priceLineVisible: false,
       color: LINE_STYLES.j.color,
     });
