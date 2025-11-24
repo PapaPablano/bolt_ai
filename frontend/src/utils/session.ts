@@ -62,7 +62,6 @@ export type TradingCalendar = {
   closeOffsetMs?: number;
   halfDayCloseOffsetMs?: number;
 };
-
 export function makeSessionResolver(calendar?: TradingCalendar) {
   const openOffset = () => calendar?.openOffsetMs ?? OPEN_OFFSET_MS;
   const closeOffsetFor = (midnightMs: number) => {

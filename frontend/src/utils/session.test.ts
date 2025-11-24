@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { resolveSessionOpenMs, makeSessionResolver, type TradingCalendar } from './session';
+import {
+  resolveSessionOpenMs,
+  makeSessionResolver,
+  type TradingCalendar,
+  etMidnightUtc,
+  OPEN_OFFSET_MS,
+  CLOSE_OFFSET_MS,
+} from './session';
 import { toEtParts, DAY_MS } from './session';
 
 const msUtc = (y: number, m: number, d: number, h: number, mi: number, s: number) => Date.UTC(y, m - 1, d, h, mi, s);
@@ -66,8 +73,19 @@ describe('resolveSessionOpenMs – holiday handling with stub calendar', () => {
   it('moves post-close to next trading day 09:30 ET', () => {
     // 2024-07-08 Mon 21:30 UTC ≈ 17:30 ET (after close)
     const t = msUtc(2024, 7, 8, 21, 30, 0);
-    const open = resolveSessionOpenMs(t);
-    expect(open).toBe(msUtc(2024, 7, 9, 13, 30, 0));
+    const midnight = etMidnightUtc(t);
+    const open = midnight + OPEN_OFFSET_MS;
+    const close = midnight + CLOSE_OFFSET_MS;
+
+    console.log('DEBUG resolveSessionOpenMs', {
+      t: new Date(t).toISOString(),
+      midnightIso: new Date(midnight).toISOString(),
+      openIso: new Date(open).toISOString(),
+      closeIso: new Date(close).toISOString(),
+    });
+
+    const resolved = resolveSessionOpenMs(t);
+    expect(resolved).toBe(msUtc(2024, 7, 9, 13, 30, 0));
   });
 
   it('skips weekend to Monday 09:30 ET', () => {
