@@ -16,6 +16,7 @@
     "ffext:run": "web-ext run --source-dir ../tools/ff-qa-panel --firefox=\"$FF_BIN\" --start-url 'http://localhost:5174/?symbol=AAPL&mock=1&seed=1337&probe=1'",
     "debug:all": "run-p debug:preview ffext:run",
     "test": "vitest --run",
+    "test:detect-open-handles": "vitest --run --detectOpenHandles",
     "test:watch": "vitest",
     "test:ui": "vitest",
     "e2e": "playwright test",
