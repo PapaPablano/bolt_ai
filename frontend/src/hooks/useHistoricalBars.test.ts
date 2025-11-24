@@ -4,9 +4,8 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useHistoricalBars } from './useHistoricalBars';
 
-vi.mock('@/lib/api/ohlc', () => ({
-  buildRangeBounds: vi.fn(() => ({ tf: '1Day', startMs: 1000, endMs: 2000 })),
-  fetchOHLC: vi.fn(async () => [
+vi.mock('@/lib/api', () => ({
+  fetchHistoricalData: vi.fn(async () => [
     {
       time: '2024-01-01T00:00:00Z',
       open: 1,
@@ -16,10 +15,6 @@ vi.mock('@/lib/api/ohlc', () => ({
       volume: 100,
     },
   ]),
-}));
-
-vi.mock('@/lib/bars', () => ({
-  normalizeBarsPayload: vi.fn(({ bars }) => bars),
 }));
 
 vi.mock('@/lib/symbols', () => ({
