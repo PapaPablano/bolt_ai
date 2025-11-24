@@ -9,6 +9,7 @@
     "build": "npm run build --prefix frontend",
     "preview": "npm run preview --prefix frontend",
     "lint": "npm run lint --prefix frontend && eslint .",
+    "test": "npm run test --prefix frontend",
     "install:all": "npm install && cd frontend && npm install",
     "postinstall": "npm install --prefix frontend",
     "smoke": "tsx scripts/smokeTest.ts",
