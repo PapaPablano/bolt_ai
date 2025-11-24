@@ -3,6 +3,7 @@ import { normalizeBarsPayload } from '../bars';
 import { supabase } from '../supabase';
 import { isValidSymbol, normalizeSymbol } from '../symbols';
 import { buildRangeBounds, fetchOHLC, windowFromDays } from './ohlc';
+import { api } from '../api-client';
 
 export interface StockQuote {
   symbol: string;
@@ -106,3 +107,31 @@ export async function fetchSchwabHistoricalData(
     volume: candle.volume,
   }));
 }
+
+// --- Proxy-based helpers (new) ----------------------------------------------
+
+export const proxyApi = {
+  schwab: {
+    getQuote: (symbols: string[] | string) => api.schwab.getQuote(symbols),
+    getPriceHistory: (
+      symbol: string,
+      options: { periodType?: string; period?: string; frequencyType?: string; frequency?: string } = {},
+    ) => api.schwab.getPriceHistory(symbol, options),
+    getMarketHours: (markets?: string, date?: string) => api.schwab.getMarketHours(markets, date),
+  },
+  alpaca: {
+    getBars: (
+      symbol: string,
+      options: { timeframe?: string; start?: string; end?: string; limit?: number } = {},
+    ) => api.alpaca.getBars(symbol, options),
+    getLatestQuote: (symbol: string) => api.alpaca.getLatestQuote(symbol),
+    getLatestTrade: (symbol: string) => api.alpaca.getLatestTrade(symbol),
+    getSnapshot: (symbols: string[] | string) => api.alpaca.getSnapshot(symbols),
+  },
+  news: {
+    getEconomicCalendar: (options: { date?: string; currency?: string; impact?: string } = {}) =>
+      api.news.getEconomicCalendar(options),
+    getTodayEvents: () => api.news.getTodayEvents(),
+    getHighImpactEvents: (startDate?: string) => api.news.getHighImpactEvents(startDate),
+  },
+};

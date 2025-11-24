@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-import aioredis
+import redis.asyncio as aioredis
 from fastapi import APIRouter, HTTPException, Query
 
 from ..clients.forexfactory import fetch_calendar
@@ -71,7 +71,7 @@ async def _redis() -> Optional[aioredis.Redis]:
     if _redis_client:
         return _redis_client
     try:
-        _redis_client = await aioredis.from_url(
+        _redis_client = aioredis.from_url(
             settings.REDIS_URL,
             encoding="utf-8",
             decode_responses=True,

@@ -9,6 +9,26 @@ const corsHeaders = {
 
 const SCHWAB_OAUTH_BASE_URL = 'https://api.schwabapi.com/v1/oauth';
 
+async function upsertToken(
+  supabase: ReturnType<typeof createClient>,
+  provider: string,
+  tokenType: string,
+  value: string,
+  expiresAt: string | null,
+) {
+  const { error } = await supabase.rpc('upsert_api_token', {
+    p_provider: provider,
+    p_token_type: tokenType,
+    p_token_value: value,
+    p_expires_at: expiresAt,
+  });
+
+  if (error) {
+    console.error('upsert_api_token RPC error (schwab-auth-exchange)', error);
+    throw error;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -81,22 +101,33 @@ Deno.serve(async (req: Request) => {
     const tokenData = await response.json();
     console.log('Token exchange successful, storing in database...');
 
+    const now = Date.now();
+    const expiresInSec = tokenData.expires_in || 1800;
+    const expiresAtIso = new Date(now + expiresInSec * 1000).toISOString();
+
     // Store tokens in database
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Clear any existing tokens first
+    // Upsert tokens into generic api_tokens store used by schwab-proxy
+    await upsertToken(supabase, 'schwab', 'access', tokenData.access_token, expiresAtIso);
+
+    if (tokenData.refresh_token) {
+      await upsertToken(supabase, 'schwab', 'refresh', tokenData.refresh_token, null);
+    }
+
+    // Clear any existing tokens first (legacy schwab_tokens table)
     await supabase.from('schwab_tokens').delete().neq('id', 0);
 
-    // Insert new tokens
+    // Insert new tokens into schwab_tokens for backward compatibility
     const { error: dbError } = await supabase
       .from('schwab_tokens')
       .insert({
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
-        expires_at: Math.floor(Date.now() / 1000) + (tokenData.expires_in || 1800),
+        expires_at: Math.floor(now / 1000) + expiresInSec,
         scope: tokenData.scope || 'MarketData',
         token_type: tokenData.token_type || 'Bearer',
         updated_at: new Date().toISOString(),

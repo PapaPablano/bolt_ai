@@ -23,6 +23,7 @@ interface TestConfig {
   functionName: string;
   payload: object;
   validateResponse: (data: unknown) => boolean;
+  optional?: boolean;
 }
 
 const hasDataArray = (value: unknown): value is { data: unknown[] } =>
@@ -66,6 +67,16 @@ const isFuturesPayload = (
   return instrumentType === 'future' && Array.isArray(data);
 };
 
+const isNonEmptyObjectOrArray = (value: unknown): boolean => {
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  if (value && typeof value === 'object') {
+    return Object.keys(value as Record<string, unknown>).length > 0;
+  }
+  return false;
+};
+
 const tests: TestConfig[] = [
   {
     functionName: 'stock-historical-v3',
@@ -96,6 +107,24 @@ const tests: TestConfig[] = [
     functionName: 'stock-search',
     payload: { body: { query: 'Apple' } },
     validateResponse: (data) => hasSearchResults(data) && data.results.some((d) => d.symbol === 'AAPL'),
+  },
+  {
+    functionName: 'alpaca-proxy',
+    payload: { body: { action: 'get_latest_quote', params: { symbol: TEST_SYMBOL } } },
+    validateResponse: (data) => isNonEmptyObjectOrArray(data),
+    optional: true,
+  },
+  {
+    functionName: 'schwab-proxy',
+    payload: { body: { action: 'get_quote', params: { symbols: [TEST_SYMBOL] } } },
+    validateResponse: (data) => isNonEmptyObjectOrArray(data),
+    optional: true,
+  },
+  {
+    functionName: 'news-proxy',
+    payload: { body: { action: 'get_today_events' } },
+    validateResponse: (data) => isNonEmptyObjectOrArray(data),
+    optional: true,
   },
 ];
 
@@ -131,21 +160,39 @@ const runSmokeTests = async () => {
       const { data, error } = await supabase.functions.invoke(test.functionName, test.payload);
 
       if (error) {
-        allTestsPassed = false;
-        console.log(`❌ FAILED (${error.message})`);
-        const context = (error as { context?: { body?: unknown } }).context;
-        if (context?.body) {
-          try {
-            const errorBody = await new Response(context.body as BodyInit).text();
-            console.log('   Error response:', errorBody.substring(0, 500));
-          } catch (streamError) {
-            console.log('   Error response could not be read:', streamError);
+        const message = error instanceof Error ? error.message : String(error);
+        if (test.optional && message.toLowerCase().includes('not_found')) {
+          console.log(`⚪ SKIPPED (optional function not deployed: ${message})`);
+          const context = (error as { context?: { body?: unknown } }).context;
+          if (context?.body) {
+            try {
+              const errorBody = await new Response(context.body as BodyInit).text();
+              console.log('   Error response:', errorBody.substring(0, 500));
+            } catch (streamError) {
+              console.log('   Error response could not be read:', streamError);
+            }
           }
+          if (data) {
+            console.log('   Response payload:', JSON.stringify(data, null, 2).substring(0, 500));
+          }
+          continue;
+        } else {
+          allTestsPassed = false;
+          console.log(`❌ FAILED (${message})`);
+          const context = (error as { context?: { body?: unknown } }).context;
+          if (context?.body) {
+            try {
+              const errorBody = await new Response(context.body as BodyInit).text();
+              console.log('   Error response:', errorBody.substring(0, 500));
+            } catch (streamError) {
+              console.log('   Error response could not be read:', streamError);
+            }
+          }
+          if (data) {
+            console.log('   Response payload:', JSON.stringify(data, null, 2).substring(0, 500));
+          }
+          continue;
         }
-        if (data) {
-          console.log('   Response payload:', JSON.stringify(data, null, 2).substring(0, 500));
-        }
-        continue;
       }
 
       if (test.validateResponse(data)) {

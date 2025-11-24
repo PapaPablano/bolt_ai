@@ -29,6 +29,8 @@ const PrivacyPage = lazy(() => import('./pages/PrivacyPage').then(m => ({ defaul
 const TermsPage = lazy(() => import('./pages/TermsPage').then(m => ({ default: m.TermsPage })));
 const SitemapPage = lazy(() => import('./pages/SitemapPage').then(m => ({ default: m.SitemapPage })));
 const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage').then(m => ({ default: m.PlaceholderPage })));
+const SchwabConnectPage = lazy(() => import('./pages/SchwabConnectPage').then(m => ({ default: m.SchwabConnectPage })));
+const SchwabCallbackPage = lazy(() => import('./pages/SchwabCallbackPage').then(m => ({ default: m.SchwabCallbackPage })));
 import { ROUTES } from './lib/urlHelpers';
 import { generateStructuredData } from './lib/seo';
 
@@ -121,7 +123,7 @@ function App() {
 
       <main id="main-content" className="container mx-auto px-4 py-8 flex-1 w-full" role="main">
         <BreadcrumbsWithSchema />
-        <Suspense fallback={<div className="text-slate-400">Loading page</div>}>
+        <Suspense fallback={<div className="text-slate-400">Loading page...</div>}>
           <Routes>
           <Route
             path="/"
@@ -158,6 +160,8 @@ function App() {
           <Route path={ROUTES.helpIndicators()} element={<HelpIndicatorsPage />} />
           <Route path={ROUTES.helpFocusManagement()} element={<HelpFocusManagementPage />} />
           <Route path={ROUTES.helpLinkingStrategy()} element={<HelpInternalLinkingPage />} />
+          <Route path={ROUTES.schwabConnect()} element={<SchwabConnectPage />} />
+          <Route path={ROUTES.schwabCallback()} element={<SchwabCallbackPage />} />
           <Route path={ROUTES.about()} element={<AboutPage />} />
           <Route path={ROUTES.privacy()} element={<PrivacyPage />} />
           <Route path={ROUTES.terms()} element={<TermsPage />} />

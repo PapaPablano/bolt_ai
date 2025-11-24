@@ -3,4 +3,4 @@ uvicorn[standard]
 asyncpg
 websockets
 httpx
-aioredis
+redis>=4.5,<6
