@@ -1,0 +1,21 @@
+# Node and build artifacts
+node_modules/
+dist/
+
+# Local environment files (may contain secrets)
+.env*
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor and OS files
+.DS_Store
+.vscode/
+.idea/
+
+# Test and tooling outputs
+coverage/
+playwright-report/
+.vitest/

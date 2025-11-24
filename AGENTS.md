@@ -1,4 +1,9 @@
-# AGENTS
+---
+description: Environment and run instructions for this repo's AI agents
+activation: always-on
+---
+
+# AGENTS — Repo Environment & Runbook
 
 ## Purpose
 Guidance for AI agents working on this repo.
@@ -18,6 +23,6 @@ Guidance for AI agents working on this repo.
 
 ## Notes
 - Service worker is disabled in dev (see `frontend/src/lib/pwa.ts`).
-- Functions are live; avoid altering secrets. Recent key values were provided out of band—agents must not commit or expose secrets.
+- Functions are live; avoid altering secrets. Do not commit keys or `.env` values.
 - Main files: `frontend/src/lib/api.ts`, `frontend/src/components/NewsPanel.tsx`, `frontend/src/lib/pwa.ts`, Supabase functions under `supabase/functions/`.
 - Pinggy tunnel (when needed): `ssh -p 443 -R0:localhost:5173 a.pinggy.io` (URL printed on connect; expires after 60m).

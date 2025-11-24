@@ -1,5 +1,6 @@
 ---
-trigger: always_on
+trigger: model_decision
+description: Financial ML Platform Rules
 ---
 
 # Financial ML Platform Rules

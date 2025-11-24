@@ -1,7 +1,14 @@
 ---
 description: FE visible-range decimation and workerized indicators rollout
-auto_execution_mode: 3
+auto_execution_mode: 1
 ---
+
+---
+title: FE visible-range decimation rollout
+description: Implement visible-range decimation and workerized indicators safely
+---
+
+# FE visible-range decimation and workerized indicators rollout
 
 1. Inspect current chart + worker wiring
    - Read `frontend/src/components/chart/AdvancedCandleChart.tsx` to understand `downsampleOhlcVisible` and indicator toggles.
