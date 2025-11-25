@@ -19,7 +19,8 @@
     /* Path Aliases */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@indicators/*": ["../packages/indicators-ts/*"]
     },
 
     /* Linting */

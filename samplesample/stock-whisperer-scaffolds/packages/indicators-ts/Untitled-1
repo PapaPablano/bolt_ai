@@ -1,0 +1,26 @@
+# [Detect/listen when visible price range changed in lightweight-chart](https://stackoverflow.com/questions/65807750/detect-listen-when-visible-price-range-changed-in-lightweight-chart)
+
+[Detect/listen when visible price range changed in lightweight-chart](https://stackoverflow.com/questions/65807750/detect-listen-when-visible-price-range-changed-in-lightweight-chart)
+[Ask Question](https://stackoverflow.com/questions/ask)
+[10 months ago](https://stackoverflow.com/questions/65807750/detect-listen-when-visible-price-range-changed-in-lightweight-chart?lastactivity)
+So the timeScale in [lightweight-chart](https://github.com/tradingview/lightweight-charts) has a way to detect when visible time range is being updated (through subscribeVisibleTimeRangeChange).
+
+```
+subscribeVisibleTimeRangeChange
+```
+
+My question, is there a similar way to detect/listen when visible price range changed? Gone through the documentation for a bit but couldn't find anything close.
+We have a use case where we wanna adjust the price line in area chart when min/max price range changes.
+Feedback would be much appreciated!
+- [javascript](https://stackoverflow.com/questions/tagged/javascript)
+- [reactjs](https://stackoverflow.com/questions/tagged/reactjs)
+- [lightweight-charts](https://stackoverflow.com/questions/tagged/lightweight-charts)
+[javascript](https://stackoverflow.com/questions/tagged/javascript)
+[reactjs](https://stackoverflow.com/questions/tagged/reactjs)
+[lightweight-charts](https://stackoverflow.com/questions/tagged/lightweight-charts)
+[Share](https://stackoverflow.com/q/65807750)
+[Improve this question](https://stackoverflow.com/posts/65807750/edit)
+[edited Jan 20, 2021 at 10:36](https://stackoverflow.com/posts/65807750/revisions)
+[Harsha Murupudi](https://stackoverflow.com/users/11707123/harsha-murupudi)
+[Charles Yeo](https://stackoverflow.com/users/3054969/charles-yeo)
+Add a comment
