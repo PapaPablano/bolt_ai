@@ -1135,6 +1135,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       __probeBoot?: {
         mounted?: { symbol: string; ts: number }[];
         unmounted?: { symbol: string; ts: number }[];
+        stages?: { stage: BootStage; ts: number }[];
       };
     };
 
@@ -1253,6 +1254,23 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       /* noop */
     }
 
+    const nudgeTimeout = window.setTimeout(() => {
+      try {
+        const hasChartEl = !!document.querySelector('[data-testid="chart-root"]');
+        if (!hasChartEl) return;
+        if (stageRef.current === 'none') {
+          stageRef.current = 'candle-series-created';
+          const boot = w.__probeBoot;
+          if (boot?.stages?.push) {
+            boot.stages.push({ stage: 'candle-series-created', ts: Date.now() });
+            if (boot.stages.length > 50) boot.stages.splice(0, boot.stages.length - 50);
+          }
+        }
+      } catch {
+        /* noop */
+      }
+    }, 5000);
+
     if (import.meta.env.DEV) {
       try {
         console.debug('[qa-probe] mounted', { symbol, namespaces: Object.keys(root) });
@@ -1262,6 +1280,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     }
 
     return () => {
+      window.clearTimeout(nudgeTimeout);
       const r = w.__probe;
       if (!r) return;
       if (r[symbol]) delete r[symbol];

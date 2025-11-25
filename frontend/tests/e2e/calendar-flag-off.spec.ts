@@ -25,7 +25,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test.afterEach(async (_ctx, testInfo) => {
+test.afterEach(async ({}, testInfo) => {
   if (testInfo.status !== testInfo.expectedStatus) {
     await debugTrackedProbePages(testInfo.title);
   }

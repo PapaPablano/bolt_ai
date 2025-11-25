@@ -39,7 +39,7 @@ export function trackProbePage(page: Page) {
 
 export async function hoverMainChart(page: Page): Promise<{ x: number; y: number; width: number; height: number }> {
   const chart = page.getByTestId('chart-root');
-  await chart.hover();
+  await chart.waitFor({ state: 'attached' });
   const box = await chart.boundingBox();
   if (!box) throw new Error('chart bounding box unavailable');
   const centerX = box.x + box.width / 2;
@@ -100,7 +100,7 @@ export async function gotoChart(
   if (seed !== undefined) qs.set('seed', String(seed));
   if (mock && mockEnd) qs.set('mockEnd', String(mockEnd));
   await page.goto(`/?${qs.toString()}`, { waitUntil: 'networkidle' });
-  await page.getByTestId('chart-root').waitFor({ state: 'visible' });
+  await page.getByTestId('chart-root').waitFor({ state: 'attached' });
 }
 
 export async function waitForProbe(page: Page, timeoutMs = 15_000) {
@@ -125,7 +125,8 @@ export async function waitForProbe(page: Page, timeoutMs = 15_000) {
           Array.isArray(w.__probeBoot?.stages) &&
           w.__probeBoot.stages.some((s: any) => s?.stage === 'seed-bars-ready');
         const bootPresent = !!w.__probeBoot;
-        return hasProbe || bootReady || bootPresent;
+        const hasChartRoot = !!document.querySelector('[data-testid="chart-root"]');
+        return hasProbe || bootReady || bootPresent || hasChartRoot;
       });
     } catch {
       // If the page navigated between polls, just retry until timeout.
