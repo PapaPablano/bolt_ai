@@ -1,18 +1,6 @@
-import { startOfDayInZone } from './dates';
+import { DateTime } from 'luxon';
 
 const NY_TZ = 'America/New_York';
-
-const etFormatter = new Intl.DateTimeFormat('en-US', {
-  timeZone: NY_TZ,
-  hour12: false,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  weekday: 'short',
-});
 
 export type EtParts = {
   year: number;
@@ -30,24 +18,25 @@ export const CLOSE_OFFSET_MS = 16 * 60 * 60 * 1000;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function toEtParts(msUtc: number): EtParts {
-  const entries = etFormatter.formatToParts(msUtc).reduce<Record<string, string>>((acc, part) => {
-    if (part.type !== 'literal') acc[part.type] = part.value;
-    return acc;
-  }, {});
+  const dt = DateTime.fromMillis(msUtc, { zone: NY_TZ });
+  const weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const weekdayIndex = Math.max(1, Math.min(dt.weekday, 7));
   return {
-    year: Number(entries.year ?? 1970),
-    month: Number(entries.month ?? 1),
-    day: Number(entries.day ?? 1),
-    hour: Number(entries.hour ?? 0),
-    minute: Number(entries.minute ?? 0),
-    second: Number(entries.second ?? 0),
-    weekday: String(entries.weekday ?? 'Mon'),
+    year: dt.year,
+    month: dt.month,
+    day: dt.day,
+    hour: dt.hour,
+    minute: dt.minute,
+    second: dt.second,
+    weekday: weekdayNames[weekdayIndex - 1] ?? 'Mon',
   };
 }
 
 // Midnight in ET (returned as UTC ms)
 export function etMidnightUtc(msUtc: number) {
-  return startOfDayInZone(msUtc, 'America/New_York');
+  const dt = DateTime.fromMillis(msUtc, { zone: NY_TZ });
+  const midnightEt = dt.startOf('day');
+  return midnightEt.toMillis();
 }
 
 function etMinutesSinceMidnight(msUtc: number): number {
