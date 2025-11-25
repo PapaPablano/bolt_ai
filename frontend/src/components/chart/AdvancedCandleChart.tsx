@@ -30,22 +30,12 @@ import { RangeBar } from './RangeBar';
 import { Button } from '@/components/ui/button';
 import PaneKDJ from './PaneKDJ';
 import { genMockBars } from '@/utils/mock';
-import { isTimeWithinBounds } from '@/workers/windowBounds';
+import { mergePanePatch, shouldIgnoreLiveBar } from './mergePaneUtils';
 
 type Props = { symbol: string; initialTf?: TF; initialRange?: Range; height?: number };
 type ProbeState = { ok: boolean; error?: string; lastEvent?: string };
 type ChartTimeRange = { from: Time | null; to: Time | null };
 type BootStage = 'none' | 'container-mounted' | 'chart-created' | 'candle-series-created' | 'seed-bars-ready';
-
-export const mergePanePatch = (prev: WorkerLinePt[], patch?: WorkerLinePt[]): WorkerLinePt[] => {
-  if (!patch?.length) return prev;
-  const next = patch[patch.length - 1];
-  if (!next) return prev;
-  if (prev.length && prev[prev.length - 1].time === next.time) {
-    return [...prev.slice(0, -1), next];
-  }
-  return [...prev, next];
-};
 
 const envVars = import.meta.env as Record<string, string | undefined>;
 const tvFlag = (envVars.VITE_CHART_VENDOR ?? envVars.VITE_USE_TRADINGVIEW ?? '').toLowerCase();
@@ -1403,7 +1393,7 @@ function updateIndicatorLastPoints(
 }
 
 const toCandle = (bar: ChartBar) => ({ ...bar, volume: bar.volume ?? 0 });
-const fromChartTimeValue = (value: Time) => {
+export const fromChartTimeValue = (value: Time) => {
   if (typeof value === 'number') {
     return USING_TV ? Math.floor(value / 1000) : value;
   }
@@ -1480,7 +1470,4 @@ function getAnchoredOriginMs(tf: TF, referenceMs: number) {
   return tf === '1Day' ? etMidnightUtc(referenceMs) : resolveSessionOpenMs(referenceMs);
 }
 
-const shouldIgnoreLiveBar = (alignedSeconds: number, bounds: { from: number; to: number } | null) => !isTimeWithinBounds(alignedSeconds, bounds);
-
-/* @__TEST_ONLY__ */
-export const __test = { fromChartTimeValue, mergePanePatch, shouldIgnoreLiveBar };
+/* test-only helpers for mergePanePatch/shouldIgnoreLiveBar now live in mergePaneUtils.ts */

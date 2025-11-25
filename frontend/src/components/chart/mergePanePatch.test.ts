@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { __test as ChartTest } from './AdvancedCandleChart';
-
-const { mergePanePatch, shouldIgnoreLiveBar } = ChartTest;
+import { mergePanePatch, shouldIgnoreLiveBar } from './mergePaneUtils';
 
 describe('mergePanePatch', () => {
   it('replaces tail when patch time equals last', () => {

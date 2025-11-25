@@ -1,3 +1,5 @@
+import { startOfDayInZone } from './dates';
+
 const NY_TZ = 'America/New_York';
 
 const etFormatter = new Intl.DateTimeFormat('en-US', {
@@ -44,10 +46,7 @@ export function toEtParts(msUtc: number): EtParts {
 }
 
 export function etMidnightUtc(msUtc: number) {
-  const parts = toEtParts(msUtc);
-  const approx = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
-  const offset = msUtc - approx;
-  return Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0) + offset;
+  return startOfDayInZone(msUtc, NY_TZ);
 }
 
 export type TradingCalendar = {
