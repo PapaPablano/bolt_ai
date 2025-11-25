@@ -103,8 +103,27 @@ export function makeSessionResolver(calendar?: TradingCalendar) {
     return cursor;
   };
 
+  // Be maximally forgiving about what callers pass (number | Date | ISO)
+  function toMs(input: unknown): number {
+    if (typeof input === 'number') return input;
+    if (input instanceof Date) return input.getTime();
+    if (typeof input === 'string') {
+      const parsed = Date.parse(input);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    // last-ditch: try valueOf, then Number()
+    const n = Number((input as any)?.valueOf?.() ?? input);
+    return Number.isFinite(n) ? n : NaN;
+  }
+
   return function resolveSessionOpenMs(msUtc: number): number {
-    const midnight = etMidnightUtc(msUtc);
+    const ts = toMs(msUtc);
+    if (!Number.isFinite(ts)) {
+      // Hard fail early so tests surface the real culprit.
+      throw new Error('resolveSessionOpenMs: invalid msUtc input');
+    }
+
+    const midnight = etMidnightUtc(ts);
     const closedToday = isFullClosure(midnight);
 
     if (closedToday) {
@@ -114,14 +133,14 @@ export function makeSessionResolver(calendar?: TradingCalendar) {
 
     const open = midnight + openOffset();
     const close = midnight + closeOffsetFor(midnight);
-    
+
     // primary numeric check + ET time-of-day fallback
-    const afterCloseNumeric = msUtc >= close;
-    const minutesNowET = etMinutesSinceMidnight(msUtc);
+    const afterCloseNumeric = ts >= close;
+    const minutesNowET = etMinutesSinceMidnight(ts);
     const closeMinutesET = closeOffsetFor(midnight) / 60000;
     const afterCloseET = minutesNowET >= closeMinutesET;
 
-    if (msUtc < open) return open;
+    if (ts < open) return open;
     if (afterCloseNumeric || afterCloseET) {
       const next = shiftMidnight(midnight, 1);
       return next + openOffset();
