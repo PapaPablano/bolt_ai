@@ -50,6 +50,11 @@ export function etMidnightUtc(msUtc: number) {
   return startOfDayInZone(msUtc, 'America/New_York');
 }
 
+function etMinutesSinceMidnight(msUtc: number): number {
+  const p = toEtParts(msUtc);
+  return p.hour * 60 + p.minute + p.second / 60;
+}
+
 export type TradingCalendar = {
   isTradingDay(msUtcMidnight: number): boolean;
   nextTradingMidnight(msUtcMidnight: number, dir: -1 | 1): number;
@@ -109,8 +114,15 @@ export function makeSessionResolver(calendar?: TradingCalendar) {
 
     const open = midnight + openOffset();
     const close = midnight + closeOffsetFor(midnight);
+    
+    // primary numeric check + ET time-of-day fallback
+    const afterCloseNumeric = msUtc >= close;
+    const minutesNowET = etMinutesSinceMidnight(msUtc);
+    const closeMinutesET = closeOffsetFor(midnight) / 60000;
+    const afterCloseET = minutesNowET >= closeMinutesET;
+
     if (msUtc < open) return open;
-    if (msUtc >= close) {
+    if (afterCloseNumeric || afterCloseET) {
       const next = shiftMidnight(midnight, 1);
       return next + openOffset();
     }
