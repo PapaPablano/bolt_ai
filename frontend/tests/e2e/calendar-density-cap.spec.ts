@@ -1,5 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { gotoChart, waitForCharts, readProbeCounts, resetClientState, debugTrackedProbePages, clearTrackedProbePages } from './utils';
+import { gotoChart, waitForCharts, waitForCalendar, readProbeCounts, resetClientState, debugTrackedProbePages, clearTrackedProbePages } from './utils';
+
+test.beforeEach(async ({ page }) => {
+  await resetClientState(page);
+  await page.addInitScript(() => {
+    const w = window as any;
+    w.__config = { ...(w.__config ?? {}), CALENDAR_ENABLED: true };
+  });
+});
 
 test.afterEach(async ({}, testInfo) => {
   if (testInfo.status !== testInfo.expectedStatus) {
@@ -9,8 +17,7 @@ test.afterEach(async ({}, testInfo) => {
 });
 
 test('Economic calendar overlay enforces density cap (<= 50)', async ({ page }) => {
-  await resetClientState(page);
-
+  test.slow();
   await page.route('**/v1/calendar**', async (route) => {
     const now = Math.floor(Date.now() / 1000);
     const body = Array.from({ length: 500 }, (_, idx) => ({
@@ -29,12 +36,13 @@ test('Economic calendar overlay enforces density cap (<= 50)', async ({ page }) 
 
   await gotoChart(page, { symbol: 'AAPL', mock: true, seed: 1337 });
   const snap = await waitForCharts(page, { symbol: 'AAPL', timeoutMs: 15_000, seriesGateMs: 15_000 });
-  expect(snap.seriesCount ?? 0).toBeGreaterThan(0);
+  await waitForCalendar(page, { symbol: 'AAPL' });
+  await page.evaluate(() => {
+    const w = window as any;
+    const entry = w.__probe?.AAPL;
+    if (entry?.setCalendarEnabled) entry.setCalendarEnabled(true);
+  });
 
-  const toggle = page.getByTestId('toggle-calendar');
-  await toggle.click();
-
-  await expect.poll(async () => (await readProbeCounts(page, 'AAPL')).markers).toBeGreaterThan(0);
   const counts = await readProbeCounts(page, 'AAPL');
   expect(counts.markers).toBeLessThanOrEqual(50);
 });

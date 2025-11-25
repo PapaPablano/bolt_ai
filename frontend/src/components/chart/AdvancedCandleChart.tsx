@@ -198,21 +198,32 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const recordStage = useCallback(
     (stage: BootStage) => {
       stageRef.current = stage;
-      if (!qaProbeEnabled || typeof window === 'undefined') return;
+      if (typeof window === 'undefined') return;
       try {
         type ProbeBootWindow = typeof window & {
           __probeBoot?: { stages?: { stage: BootStage; ts: number }[] };
+          __probeMeta?: Record<string, { chartReady?: boolean; seriesReady?: boolean }>;
         };
-        const boot = (window as ProbeBootWindow).__probeBoot;
-        if (boot?.stages?.push) {
-          boot.stages.push({ stage, ts: Date.now() });
-          if (boot.stages.length > 50) boot.stages.splice(0, boot.stages.length - 50);
+        const w = window as ProbeBootWindow;
+
+        // Record stage timeline for debugging when probe boot exists.
+        const boot = w.__probeBoot;
+        if (boot) {
+          const stages = (boot.stages ??= []);
+          stages.push({ stage, ts: Date.now() });
+          if (stages.length > 100) stages.splice(0, stages.length - 100);
         }
+
+        // Maintain lightweight meta flags for e2e readiness checks.
+        const metaRoot = (w.__probeMeta ??= {});
+        const meta = (metaRoot[symbol] ??= {});
+        if (stage === 'chart-created') meta.chartReady = true;
+        if (stage === 'candle-series-created' || stage === 'seed-bars-ready') meta.seriesReady = true;
       } catch {
         /* noop */
       }
     },
-    [qaProbeEnabled],
+    [symbol],
   );
 
   useEffect(() => {
@@ -889,7 +900,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     normalized = Array.from(byTime.values()).sort((a, b) => a.time - b.time);
 
     seedBarsRef.current = normalized;
-    if (qaProbeEnabled && normalized.length) recordStage('seed-bars-ready');
+    if (normalized.length) recordStage('seed-bars-ready');
     setSeedBarsVersion((prev) => prev + 1);
 
     const entireRange =
@@ -956,6 +967,16 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       calendarSigRef.current = null;
       setCalendarError(null);
       clearCalendarMarkers();
+      try {
+        if (typeof window !== 'undefined') {
+          const w = window as any;
+          const metaRoot = (w.__probeMeta ??= {});
+          const meta = (metaRoot[symbol] ??= {});
+          meta.calendarReady = false;
+        }
+      } catch {
+        /* noop */
+      }
       return;
     }
 
@@ -983,6 +1004,16 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
           econMarkerCountRef.current = applied;
         }
         setEconEventsLen(events.length);
+        try {
+          if (typeof window !== 'undefined') {
+            const w = window as any;
+            const metaRoot = (w.__probeMeta ??= {});
+            const meta = (metaRoot[symbol] ??= {});
+            meta.calendarReady = true;
+          }
+        } catch {
+          /* noop */
+        }
       } catch (err) {
         if (controller.signal.aborted) return;
         setCalendarError(err instanceof Error ? err.message : 'Calendar fetch failed');
@@ -992,6 +1023,16 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         calendarSigRef.current = null;
         clearCalendarMarkers();
         if (import.meta.env.DEV) console.warn('[calendar] fetch failed', err);
+        try {
+          if (typeof window !== 'undefined') {
+            const w = window as any;
+            const metaRoot = (w.__probeMeta ??= {});
+            const meta = (metaRoot[symbol] ??= {});
+            meta.calendarReady = false;
+          }
+        } catch {
+          /* noop */
+        }
       }
     }, CALENDAR_DEBOUNCE_MS) as unknown as number;
 
@@ -1126,10 +1167,16 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     [],
   );
 
-  // QA probe (namespaced by symbol) available in dev and flagged preview builds
+  // QA probe (namespaced by symbol) available when __probeBoot is initialized
   useEffect(() => {
-    if (!qaProbeEnabled) return;
+    if (typeof window === 'undefined') return;
     type ProbeRoot = Record<string, unknown>;
+    type ProbeMeta = {
+      chartReady?: boolean;
+      seriesReady?: boolean;
+      calendarEnabled?: boolean;
+      calendarReady?: boolean;
+    };
     type ProbeGlobal = typeof window & {
       __probe?: Record<string, ProbeRoot>;
       __probeBoot?: {
@@ -1137,11 +1184,18 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         unmounted?: { symbol: string; ts: number }[];
         stages?: { stage: BootStage; ts: number }[];
       };
+      __probeMeta?: Record<string, ProbeMeta>;
     };
 
     const w = window as ProbeGlobal;
+    if (!w.__probeBoot) return;
     const root = (w.__probe ??= {});
     const entry = (root[symbol] ??= {} as ProbeRoot);
+
+    // Ensure a meta entry exists so tests can use a stable readiness contract.
+    const metaRoot = (w.__probeMeta ??= {} as Record<string, ProbeMeta>);
+    const meta = (metaRoot[symbol] ??= {} as ProbeMeta);
+    meta.calendarEnabled = calendarEnabled;
 
     Object.defineProperties(entry, {
       macdBarSpacing: {
@@ -1192,6 +1246,28 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
           });
         },
       },
+      setCalendarEnabled: {
+        configurable: true,
+        enumerable: true,
+        value: (on: boolean) => {
+          if (!env.CALENDAR_ENABLED) return;
+          updateTfPreset(tf, { useCalendar: on });
+        },
+      },
+      setMacdEnabled: {
+        configurable: true,
+        enumerable: true,
+        value: (on: boolean) => {
+          updateTfPreset(tf, { useMACD: on });
+        },
+      },
+      setKdjEnabled: {
+        configurable: true,
+        enumerable: true,
+        value: (on: boolean) => {
+          updateTfPreset(tf, { useKDJ: on });
+        },
+      },
       panLogical: {
         configurable: true,
         enumerable: true,
@@ -1225,6 +1301,16 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
           const range = { from: toChartTime(bounds.from), to: toChartTime(bounds.to) } as const;
           chart.timeScale().setVisibleRange(range as unknown as { from: Time; to: Time });
           return bounds;
+        },
+      },
+      resetView: {
+        configurable: true,
+        enumerable: true,
+        value: () => {
+          const chart = chartRef.current;
+          if (!chart) return null;
+          chart.timeScale().fitContent();
+          return chart.timeScale().getVisibleLogicalRange?.() ?? null;
         },
       },
       econEventCount: {
@@ -1303,7 +1389,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
         }
       }
     };
-  }, [getSeriesCount, qaProbeEnabled, setStylePrefs, symbol]);
+  }, [getSeriesCount, setStylePrefs, symbol]);
 
   return (
     <div className="space-y-3">

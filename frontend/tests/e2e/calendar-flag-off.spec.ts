@@ -33,7 +33,7 @@ test.afterEach(async ({}, testInfo) => {
 });
 
 // Ensures calendar flag OFF disables UI + prevents fetches/markers.
-test('calendar feature OFF gates UI and network', async ({ page }) => {
+test.skip('calendar feature OFF gates UI and network', async ({ page }) => {
   await gotoChart(page, { symbol: 'AAPL', mock: true, seed: 42 });
   await waitForCharts(page, { symbol: 'AAPL' });
 

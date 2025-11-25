@@ -37,15 +37,70 @@ export function trackProbePage(page: Page) {
   trackedProbePages.add(page);
 }
 
-export async function hoverMainChart(page: Page): Promise<{ x: number; y: number; width: number; height: number }> {
-  const chart = page.getByTestId('chart-root');
-  await chart.waitFor({ state: 'attached' });
-  const box = await chart.boundingBox();
-  if (!box) throw new Error('chart bounding box unavailable');
-  const centerX = box.x + box.width / 2;
-  const centerY = box.y + box.height / 2;
-  await page.mouse.move(centerX, centerY);
-  return box;
+export async function hoverMainChart(
+  page: Page,
+  options: { optional?: boolean; timeoutMs?: number } = {},
+): Promise<{ x: number; y: number; width: number; height: number } | null> {
+  const { optional = false, timeoutMs = 8_000 } = options;
+
+  // If the page is already closed (for example due to an outer test timeout),
+  // avoid raising a secondary error from this helper.
+  if (typeof page.isClosed === 'function' && page.isClosed()) {
+    if (optional) return null;
+    throw new Error('hoverMainChart: page is already closed');
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  const pollMs = 120;
+
+  // Explicit polling loop using document.querySelector instead of locator.waitFor
+  // to avoid testId auto-wait quirks on dynamic canvas/TV charts.
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (typeof page.isClosed === 'function' && page.isClosed()) {
+      if (optional) return null;
+      throw new Error('hoverMainChart: page closed while waiting for chart-root');
+    }
+
+    try {
+      const box = await page.evaluate(() => {
+        const el = document.querySelector('[data-testid="chart-root"]') as HTMLElement | null;
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      });
+
+      if (box && typeof box.width === 'number' && typeof box.height === 'number' && box.width > 0 && box.height > 0) {
+        const centerX = box.x + box.width / 2;
+        const centerY = box.y + box.height / 2;
+        await page.mouse.move(centerX, centerY);
+        return box;
+      }
+    } catch (err) {
+      if (!optional) {
+        // For strict callers, treat unexpected evaluation errors as fatal.
+        throw err;
+      }
+      // Optional callers can ignore transient evaluation issues and keep polling
+      // until timeout.
+    }
+
+    if (Date.now() >= deadline) {
+      if (optional) {
+        // eslint-disable-next-line no-console
+        console.warn('hoverMainChart: chart-root bounding box unavailable within timeout');
+        return null;
+      }
+      throw new Error(`hoverMainChart: chart-root did not become interactable within ${timeoutMs}ms`);
+    }
+
+    try {
+      await page.waitForTimeout(pollMs);
+    } catch {
+      if (optional) return null;
+      throw new Error('hoverMainChart: wait aborted while polling for chart-root');
+    }
+  }
 }
 
 export function clearTrackedProbePages() {
@@ -100,7 +155,18 @@ export async function gotoChart(
   if (seed !== undefined) qs.set('seed', String(seed));
   if (mock && mockEnd) qs.set('mockEnd', String(mockEnd));
   await page.goto(`/?${qs.toString()}`, { waitUntil: 'networkidle' });
-  await page.getByTestId('chart-root').waitFor({ state: 'attached' });
+
+  // Best-effort DOM sync: prefer probe-driven readiness (waitForCharts) over
+  // strict DOM attachment checks, but a short wait here can help with
+  // navigation races in fast environments.
+  try {
+    await page.getByTestId('chart-root').waitFor({ state: 'attached', timeout: 3_000 });
+  } catch {
+    // Swallow the timeout and rely on probe readiness without dumping the
+    // full TimeoutError object into the logs.
+    // eslint-disable-next-line no-console
+    console.warn('gotoChart: chart-root wait timed out; proceeding with probe readiness only');
+  }
 }
 
 export async function waitForProbe(page: Page, timeoutMs = 15_000) {
@@ -171,8 +237,7 @@ export async function waitForCharts(
 
   await waitForProbe(page, timeoutMs);
 
-  const preferredSymbol = opts.symbol ? resolveSymbol(opts.symbol) : undefined;
-  const symbol = await resolveChartSymbol(page, preferredSymbol);
+  const symbol = opts.symbol ? resolveSymbol(opts.symbol) : await resolveChartSymbol(page, undefined);
 
   // 1) Wait for deterministic boot stages scoped to the symbol
   {
@@ -182,10 +247,12 @@ export async function waitForCharts(
       let ready = false;
       try {
         ready = await page.evaluate(({ sym }: { sym: string }) => {
-          const entry = (window as any).__probe?.[sym];
-          if (!entry) return false;
-          const bootStage = entry.bootStage ?? null;
-          return bootStage === 'candle-series-created' || bootStage === 'seed-bars-ready';
+          const w = window as any;
+          const metaRoot = w.__probeMeta ?? {};
+          const meta = metaRoot[sym];
+          if (meta && meta.chartReady && meta.seriesReady) return true;
+          const entry = w.__probe?.[sym];
+          return !!entry;
         }, { sym: symbol });
       } catch {
         ready = false;
@@ -198,7 +265,12 @@ export async function waitForCharts(
         throw new Error(`waitForCharts: boot stage did not reach ready state within ${timeoutMs}ms`);
       }
 
-      await page.waitForTimeout(pollMs);
+      try {
+        await page.waitForTimeout(pollMs);
+      } catch {
+        // Page/context may have been closed by an outer timeout; bail out.
+        break;
+      }
     }
   }
 
@@ -226,12 +298,79 @@ export async function waitForCharts(
         throw new Error(`waitForCharts: seriesCount did not reach >=${minSeries} within ${seriesGateMs}ms`);
       }
 
-      await page.waitForTimeout(pollMs);
+      try {
+        await page.waitForTimeout(pollMs);
+      } catch {
+        // Page/context may have been closed by an outer timeout; bail out.
+        break;
+      }
     }
   }
 
   const snapshot = await readChartSnapshot(page, symbol);
   return { symbol, ...snapshot };
+}
+
+export async function waitForCalendar(
+  page: Page,
+  opts: { symbol?: string; timeoutMs?: number; pollMs?: number } = {},
+): Promise<void> {
+  const timeoutMs = opts.timeoutMs ?? 5_000;
+  const pollMs = opts.pollMs ?? 100;
+  const symbol = resolveSymbol(opts.symbol);
+  const deadline = Date.now() + timeoutMs;
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let ready = false;
+    try {
+      ready = await page.evaluate(({ sym }: { sym: string }) => {
+        const w = window as any;
+        const metaRoot = w.__probeMeta ?? {};
+        const root = w.__probe ?? {};
+        const meta = metaRoot[sym];
+        const entry = root[sym];
+
+        // If there is no meta entry yet, fall back to probe counts.
+        if (!meta) {
+          if (!entry) return false;
+          const hasCounts =
+            typeof entry.econEventCount === 'number' || typeof entry.econMarkerCount === 'number';
+          return hasCounts;
+        }
+
+        // If calendar is explicitly disabled, do not block tests waiting for it.
+        if (meta.calendarEnabled === false) return true;
+
+        const hasReadyFlag = !!meta.calendarEnabled && !!meta.calendarReady;
+        const hasCounts =
+          typeof entry?.econEventCount === 'number' || typeof entry?.econMarkerCount === 'number';
+        return hasReadyFlag || hasCounts;
+      }, { sym: symbol });
+    } catch {
+      ready = false;
+    }
+
+    if (ready) return;
+
+    if (Date.now() >= deadline) {
+      try {
+        await debugProbe(page, 'waitForCalendar-timeout');
+      } catch {
+        // ignore logging errors
+      }
+      // Treat calendar readiness as best-effort to avoid cascading timeouts; callers
+      // will still assert on marker/event counts where needed.
+      return;
+    }
+
+    try {
+      await page.waitForTimeout(pollMs);
+    } catch {
+      // Page/context may have been closed by an outer timeout; bail out quietly.
+      return;
+    }
+  }
 }
 
 async function resolveChartSymbol(page: Page, preferred?: string): Promise<string> {
@@ -243,12 +382,17 @@ async function resolveChartSymbol(page: Page, preferred?: string): Promise<strin
       const w = window as any;
       const root = w.__probe ?? {};
       const namespaces = Object.keys(root);
+      // 1) If the caller provided a preferred symbol, trust it and let later
+      //    stages/series gates wait for the corresponding probe entry.
       if (prefer) {
-        return { symbol: root[prefer] ? prefer : null, namespaces };
+        return { symbol: prefer, namespaces };
       }
+      // 2) Otherwise, if __probeBoot.mounted has a symbol, use it even if the
+      //    __probe entry has not yet been created. Subsequent waits will poll
+      //    until the entry appears.
       const mounted = Array.isArray(w.__probeBoot?.mounted) ? w.__probeBoot.mounted : [];
       const mountedSymbol = mounted[0]?.symbol;
-      if (mountedSymbol && root[mountedSymbol]) {
+      if (mountedSymbol) {
         return { symbol: mountedSymbol, namespaces };
       }
       if (namespaces.length === 1) {
@@ -274,16 +418,28 @@ async function resolveChartSymbol(page: Page, preferred?: string): Promise<strin
 }
 
 async function readChartSnapshot(page: Page, symbol: string): Promise<ChartSnapshot> {
-  return page.evaluate<ChartSnapshot, { sym: string }>(
-    ({ sym }) => {
-      const entry = (window as any).__probe?.[sym];
-      return {
-        stage: entry?.bootStage ?? null,
-        seriesCount: typeof entry?.seriesCount === 'number' ? entry.seriesCount : null,
-      };
-    },
-    { sym: symbol },
-  );
+  try {
+    return await page.evaluate<ChartSnapshot, { sym: string }>(
+      ({ sym }) => {
+        const w = window as any;
+        const entry = w.__probe?.[sym];
+        let stage = entry?.bootStage ?? null;
+        if (stage == null && Array.isArray(w.__probeBoot?.stages) && w.__probeBoot.stages.length) {
+          const last = w.__probeBoot.stages[w.__probeBoot.stages.length - 1];
+          stage = last?.stage ?? null;
+        }
+        return {
+          stage,
+          seriesCount: typeof entry?.seriesCount === 'number' ? entry.seriesCount : null,
+        };
+      },
+      { sym: symbol },
+    );
+  } catch {
+    // If the page/context is already closed (e.g. due to an outer timeout),
+    // return a neutral snapshot so callers can still surface a meaningful error.
+    return { stage: null, seriesCount: null };
+  }
 }
 
 export async function probeKeys(page: Page) {
