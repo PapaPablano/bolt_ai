@@ -45,8 +45,9 @@ export function toEtParts(msUtc: number): EtParts {
   };
 }
 
+// Midnight in ET (returned as UTC ms)
 export function etMidnightUtc(msUtc: number) {
-  return startOfDayInZone(msUtc, NY_TZ);
+  return startOfDayInZone(msUtc, 'America/New_York');
 }
 
 export type TradingCalendar = {
