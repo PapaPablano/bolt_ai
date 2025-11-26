@@ -26,6 +26,7 @@ export type STAIResponse = {
   factor: number[];
   perf: number[];
   cluster: ('LOW' | 'AVG' | 'TOP')[];
+  labels: ('TREND_UP' | 'TREND_DOWN' | 'CHOP')[];
 };
 
 const base = '/api';

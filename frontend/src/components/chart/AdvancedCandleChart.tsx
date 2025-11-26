@@ -32,7 +32,16 @@ import PaneKDJ from './PaneKDJ';
 import { genMockBars } from '@/utils/mock';
 import { mergePanePatch, shouldIgnoreLiveBar } from './mergePaneUtils';
 
-type Props = { symbol: string; initialTf?: TF; initialRange?: Range; height?: number };
+export type OverlaySeries = { id: string; points: { ts: string; y: number }[] };
+
+type Props = {
+  symbol: string;
+  initialTf?: TF;
+  initialRange?: Range;
+  height?: number;
+  timeframe?: string;
+  overlays?: OverlaySeries[];
+};
 type ProbeState = { ok: boolean; error?: string; lastEvent?: string };
 type ChartTimeRange = { from: Time | null; to: Time | null };
 type BootStage = 'none' | 'container-mounted' | 'chart-created' | 'candle-series-created' | 'seed-bars-ready';
@@ -72,7 +81,14 @@ const rangeToMinutes = (value: Range | string): number => {
       return 900;
   }
 };
-export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initialRange = '1Y', height = 520 }: Props) {
+export default function AdvancedCandleChart({
+  symbol,
+  initialTf = '1Hour',
+  initialRange = '1Y',
+  height = 520,
+  timeframe,
+  overlays: overlayProp,
+}: Props) {
   type QaProbeWindow = typeof window & { __QA_PROBE__?: string };
   const qaProbeEnabled =
     import.meta.env.DEV ||
@@ -96,7 +112,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   });
   const { enabled: probeEnabled } = useProbeToggle();
   const { loading: prefsLoading, prefs, getTfPreset, setDefaultTf, setDefaultRange, updateTfPreset, setIndicatorStyles } = useChartPrefs();
-  const tf: TF = prefs.default_timeframe ?? initialTf;
+  const tf: TF = (timeframe as TF) ?? (prefs.default_timeframe ?? initialTf);
   const range: Range = prefs.default_range ?? initialRange;
   const preset = getTfPreset(tf);
   const calendarPrefs = prefs.calendar ?? DEFAULT_CALENDAR_PREFS;
@@ -125,6 +141,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
   const macdLineRef = useRef<ISeriesApi<'Line'> | null>(null);
   const macdSigRef = useRef<ISeriesApi<'Line'> | null>(null);
   const macdHistRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const overlaySeriesRef = useRef<Record<string, ISeriesApi<'Line'>>>({});
   const fpsTrackerRef = useRef<{ rafId: number; lastTs: number; accum: number; frames: number; fps: number }>({
     rafId: 0,
     lastTs: 0,
@@ -708,6 +725,36 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     };
   }, [applyVisibleDecimation, pushWindowToWorker, range, symbol, tf]);
 
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const want = overlayProp ?? [];
+
+    for (const ov of want) {
+      if (!overlaySeriesRef.current[ov.id]) {
+        overlaySeriesRef.current[ov.id] = chart.addLineSeries({
+          lineWidth: 1,
+          lastValueVisible: false,
+          priceLineVisible: false,
+        });
+      }
+      const useIso = ov.points[0]?.ts?.includes?.('T');
+      overlaySeriesRef.current[ov.id].setData(
+        ov.points
+          .filter((p) => Number.isFinite(p.y))
+          .map((p) => ({ time: (useIso ? (p.ts as Time) : (p.ts as any)), value: p.y })),
+      );
+    }
+
+    for (const id of Object.keys(overlaySeriesRef.current)) {
+      if (!want.find((w) => w.id === id)) {
+        chart.removeSeries(overlaySeriesRef.current[id]);
+        delete overlaySeriesRef.current[id];
+      }
+    }
+  }, [overlayProp]);
+
   useLayoutEffect(() => {
     const container = mainRef.current;
     if (!container) {
@@ -727,6 +774,7 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
     rsiChartRef.current = null;
     candleRef.current = null;
     overlays.current = {};
+    overlaySeriesRef.current = {};
     rsiSeriesRef.current = null;
     macdLineRef.current = null;
     macdSigRef.current = null;
@@ -1436,13 +1484,17 @@ export default function AdvancedCandleChart({ symbol, initialTf = '1Hour', initi
       />
 
       <div className="relative">
-        <div data-testid="chart-root" ref={mainRef} className="w-full min-h-[320px]" style={{ minHeight: chartAreaHeight }} />
+        <div
+          data-testid="chart-root"
+          ref={mainRef}
+          className={`w-full min-h-[${chartAreaHeight}px]`}
+        />
         {isChartLoading && (
           <div className="absolute inset-0 grid place-items-center text-slate-400 bg-slate-900/40">Loading…</div>
         )}
       </div>
-      {preset.useRSI && <div data-testid="pane-rsi" ref={rsiRef} className="w-full" style={{ minHeight: 140 }} />}
-      {preset.useMACD && <div data-testid="pane-macd" ref={macdRef} className="w-full" style={{ minHeight: 180 }} />}
+      {preset.useRSI && <div data-testid="pane-rsi" ref={rsiRef} className="w-full min-h-[140px]" />}
+      {preset.useMACD && <div data-testid="pane-macd" ref={macdRef} className="w-full min-h-[180px]" />}
       {showKdjPane && <PaneKDJ data-testid="pane-kdj" k={kdjK} d={kdjD} j={kdjJ} lineWidths={kdjLineWidths} />}
 
       {showProbe && (

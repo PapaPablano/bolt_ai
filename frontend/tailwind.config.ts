@@ -4,6 +4,10 @@ import tailwindcssAnimate from 'tailwindcss-animate';
 export default {
   darkMode: ['class'],
   content: ['./pages/**/*.{ts,tsx}', './components/**/*.{ts,tsx}', './app/**/*.{ts,tsx}', './src/**/*.{ts,tsx}'],
+  safelist: [
+    { pattern: /min-h-\[\d+px\]/ },
+    { pattern: /w-\[\d+px\]/ },
+  ],
   prefix: '',
   theme: {
     container: {

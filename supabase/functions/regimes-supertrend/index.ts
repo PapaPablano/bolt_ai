@@ -77,7 +77,49 @@ serve(async (req) => {
       seed: 42,
     });
 
+    const labels: ('TREND_UP' | 'TREND_DOWN' | 'CHOP')[] = [];
+    const feat: any[] = [];
+    for (let i = 0; i < bars.length; i++) {
+      const b = out.bands[i];
+      const f = out.factor[i];
+      const prevClose = i > 0 ? bars[i - 1].c : bars[i].c;
+
+      if (!b || !Number.isFinite(b.upper) || !Number.isFinite(b.lower)) {
+        labels.push('CHOP');
+        feat.push(null);
+        continue;
+      }
+
+      const effFactor = Number.isFinite(f) && f > 0 ? f : 3;
+      const width = Math.abs(b.upper - b.lower);
+      const atrEff = width > 0 && effFactor > 0 ? width / (2 * effFactor) : 0;
+      const atrNorm = atrEff > 0 && Number.isFinite(bars[i].c)
+        ? atrEff / Math.max(1e-12, Math.abs(bars[i].c))
+        : 0;
+      const distUpper = (bars[i].c - b.upper) / Math.max(1e-12, atrEff || 1);
+      const distLower = (bars[i].c - b.lower) / Math.max(1e-12, atrEff || 1);
+      const ret1 = Math.log(
+        Math.max(1e-12, bars[i].c) / Math.max(1e-12, prevClose),
+      );
+
+      let lab: 'TREND_UP' | 'TREND_DOWN' | 'CHOP' = 'CHOP';
+      if (b.trend === 1 && distLower > -1 && distLower < 2 && atrNorm < 0.02) {
+        lab = 'TREND_UP';
+      } else if (b.trend === -1 && distUpper < 1 && distUpper > -2 && atrNorm < 0.02) {
+        lab = 'TREND_DOWN';
+      }
+
+      labels.push(lab);
+      feat.push({
+        dist_upper: distUpper,
+        dist_lower: distLower,
+        atr_norm: atrNorm,
+        ret_1: ret1,
+      });
+    }
+
     const persist = u.searchParams.get('persist') === '1';
+    const persistClusters = u.searchParams.get('persist_clusters') === '1';
     if (persist && rows && rows.length === bars.length) {
       const inserts: any[] = [];
       for (let i = 0; i < rows.length; i++) {
@@ -110,7 +152,33 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify(out), {
+    if (persistClusters && rows && rows.length === labels.length) {
+      const clusterInserts: any[] = [];
+      for (let i = 0; i < rows.length; i++) {
+        const lab = labels[i];
+        if (!lab) continue;
+        clusterInserts.push({
+          symbol_id: sid,
+          timeframe: tf,
+          ts: rows[i].ts,
+          label: lab,
+          features_json: feat[i],
+          model_version: 'stai_stub_v1',
+        });
+      }
+
+      if (clusterInserts.length) {
+        const { error: cErr } = await supabase
+          .from('ta_clusters')
+          .upsert(clusterInserts, { onConflict: 'symbol_id,timeframe,ts' });
+        if (cErr) {
+          // eslint-disable-next-line no-console
+          console.warn('ta_clusters upsert error', cErr);
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ ...out, labels }), {
       headers: { 'content-type': 'application/json' },
     });
   } catch (e) {

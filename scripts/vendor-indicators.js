@@ -12,6 +12,7 @@ const functions = [
   'indicators-kdj',
   'regimes-supertrend',
   'alerts-evaluate',
+  'jobs-stai-batch',
 ];
 
 for (const fn of functions) {

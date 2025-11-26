@@ -19,6 +19,8 @@ const ScreenerPage = lazy(() => import('./pages/ScreenerPage').then(m => ({ defa
 const AlertsPage = lazy(() => import('./pages/AlertsPage').then(m => ({ default: m.AlertsPage })));
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })));
 const LiveChartDemoPage = lazy(() => import('./pages/LiveChartDemoPage').then(m => ({ default: m.LiveChartDemoPage })));
+const ChartWorkspacePage = lazy(() => import('./pages/ChartWorkspace').then(m => ({ default: m.default || m.ChartWorkspace })));
+const OptionsPage = lazy(() => import('./pages/OptionsPage').then(m => ({ default: m.default || m.OptionsPage })));
 const HelpPage = lazy(() => import('./pages/HelpPage').then(m => ({ default: m.HelpPage })));
 const HelpGettingStartedPage = lazy(() => import('./pages/help/GettingStartedPage').then(m => ({ default: m.HelpGettingStartedPage })));
 const HelpIndicatorsPage = lazy(() => import('./pages/help/IndicatorsGuidePage').then(m => ({ default: m.HelpIndicatorsPage })));
@@ -77,6 +79,7 @@ function App() {
       { label: 'Watchlist', to: ROUTES.watchlist(), isActive: location.pathname.startsWith('/watchlist') },
       { label: 'Markets', to: ROUTES.markets(), isActive: location.pathname.startsWith('/markets') },
       { label: 'Compare', to: ROUTES.compare(), isActive: location.pathname.startsWith('/compare') },
+      { label: 'Options', to: '/options', isActive: location.pathname.startsWith('/options') },
       { label: 'Help', to: ROUTES.help(), isActive: location.pathname.startsWith('/help') },
     ],
     [location.pathname]
@@ -155,6 +158,8 @@ function App() {
           <Route path={ROUTES.alerts()} element={<AlertsPage />} />
           <Route path={ROUTES.portfolio()} element={<PortfolioPage />} />
           <Route path={ROUTES.liveChartDemo()} element={<LiveChartDemoPage />} />
+          <Route path="/options" element={<OptionsPage />} />
+          <Route path="/workspace" element={<ChartWorkspacePage />} />
           <Route path={ROUTES.help()} element={<HelpPage />} />
           <Route path={ROUTES.helpGettingStarted()} element={<HelpGettingStartedPage />} />
           <Route path={ROUTES.helpIndicators()} element={<HelpIndicatorsPage />} />
