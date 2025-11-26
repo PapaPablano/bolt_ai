@@ -21,7 +21,9 @@
     "e2e": "npm run -w frontend e2e",
     "e2e:dev": "npm run -w frontend e2e -- --project=chromium",
     "e2e:preview": "npm run -w frontend e2e -- --project=chromium",
-    "e2e:grep": "npm run -w frontend e2e -- --grep"
+    "e2e:grep": "npm run -w frontend e2e -- --grep",
+    "edge:vendor": "pnpm -w --silent --filter @indicators/ts build:edge && node scripts/vendor-indicators.mjs",
+    "deploy:functions": "pnpm edge:vendor && supabase functions deploy indicators-bbands indicators-kdj regimes-supertrend alerts-evaluate"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.80.0",

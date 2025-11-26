@@ -1,0 +1,11 @@
+{
+  "name": "@indicators/ts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/edge/index.js",
+  "types": "dist/edge/index.d.ts",
+  "scripts": {
+    "build:edge": "tsc -p tsconfig.edge.json"
+  }
+}

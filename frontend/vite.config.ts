@@ -8,6 +8,13 @@ export default defineConfig({
     port: 5173,
     strictPort: false,
     open: true,
+    proxy: {
+      '^/api/(indicators|regimes|alerts-evaluate)': {
+        target: process.env.VITE_EDGE_BASE_URL || 'http://127.0.0.1:54321/functions/v1',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api/, ''),
+      },
+    },
   },
   build: {
     outDir: 'dist',
