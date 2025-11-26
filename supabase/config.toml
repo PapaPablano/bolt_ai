@@ -2,3 +2,6 @@ project_id = "iwwdxshzrxilpzehymeu"
 
 [functions.options-rank]
 verify_jwt = false
+
+[functions.options-watchlist]
+verify_jwt = true

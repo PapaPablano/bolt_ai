@@ -14,6 +14,7 @@ const hasSupabaseEnv = Boolean(env.supabaseUrl && env.supabaseAnonKey);
 const createMockSupabaseClient = () => ({
   auth: {
     getUser: async () => ({ data: { user: null }, error: null }),
+    getSession: async () => ({ data: { session: null }, error: null }),
   },
   from: () => ({
     select: () => ({

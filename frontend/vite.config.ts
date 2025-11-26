@@ -9,7 +9,7 @@ export default defineConfig({
     strictPort: false,
     open: true,
     proxy: {
-      '^/api/(indicators|regimes|alerts-evaluate|jobs-stai-batch|options-rank)': {
+      '^/api/(indicators|regimes|alerts-evaluate|jobs-stai-batch|options-rank|options-watchlist)': {
         target: process.env.VITE_EDGE_BASE_URL || 'http://127.0.0.1:54321/functions/v1',
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ''),

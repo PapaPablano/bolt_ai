@@ -13,6 +13,7 @@ type QuoteRow = {
   delta: number | null;
   oi: number | null;
   vol: number | null;
+  updated_at?: string | null; // NEW
 };
 
 type OptionRow = {
@@ -20,8 +21,11 @@ type OptionRow = {
   right: "C" | "P";
   strike: number;
   expiry: string;
-  options_quotes: QuoteRow[] | null;
+  options_quotes: QuoteRow | QuoteRow[] | null;
 };
+
+// helper type so we can carry lastQuoteAt through filters
+type Mapped = Contract & { lastQuoteAt?: string };
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -86,43 +90,120 @@ serve(async (req: Request) => {
     const { data: rows, error: rowsErr } = await supabase
       .from("options_contracts")
       .select(
-        "id, right, strike, expiry, options_quotes(bid,ask,iv,delta,oi,vol)",
+        "id, right, strike, expiry, options_quotes!options_quotes_contract_fk!inner(bid,ask,iv,delta,oi,vol,updated_at)",
       )
       .eq("symbol_id", sym.id);
 
-    if (rowsErr) return json({ ok: false, error: String(rowsErr) }, 500);
+    if (rowsErr) return json({ ok: false, error: rowsErr }, 500);
 
     const now = new Date();
     const rawRows = ((rows as OptionRow[] | null) ?? []);
 
-    const contracts: Contract[] = rawRows
-      .filter((r) => r.right === (side === "call" ? "C" : "P"))
-      .map((r) => {
-        const dte = Math.max(
-          0,
-          Math.round((Date.parse(r.expiry) - now.getTime()) / 86400000),
-        );
-        const q = r.options_quotes?.[0];
-        return {
-          id: r.id,
-          strike: r.strike,
-          expiry: r.expiry,
-          dte,
-          bid: q?.bid ?? 0,
-          ask: q?.ask ?? 0,
-          iv: q?.iv ?? 0,
-          oi: q?.oi ?? 0,
-          vol: q?.vol ?? 0,
-          delta: q?.delta ?? undefined,
-        } satisfies Contract;
-      })
-      .filter((c) => c.dte >= dteMin && c.dte <= dteMax);
+    const staleMaxMinRaw = url.searchParams.get("staleMaxMin");
+    const staleMaxMin = staleMaxMinRaw ? Number(staleMaxMinRaw) : NaN;
+    const dropStale = Number.isFinite(staleMaxMin) && staleMaxMin > 0;
 
-    const spot = spotParam || 0;
+    const debug = url.searchParams.get("debug") === "1";
+    const counters = {
+      total: rawRows.length,
+      sideFiltered: 0,
+      dteFiltered: 0,
+      quotePresent: 0,
+      quoteQualityPass: 0,
+      dropped: {
+        noQuote: 0,
+        zeroAsk: 0,
+        zeroIv: 0,
+        zeroOi: 0,
+        stale: 0,
+      },
+    };
+
+    const sideWanted = side === "call" ? "C" : "P";
+    const sideRows = rawRows.filter((r) => r.right === sideWanted);
+    counters.sideFiltered = sideRows.length;
+
+    const mapped: Mapped[] = sideRows.map((r) => {
+      const dte = Math.max(
+        0,
+        Math.round((Date.parse(r.expiry) - now.getTime()) / 86400000),
+      );
+
+      const oq = r.options_quotes as QuoteRow | QuoteRow[] | null;
+      const q: QuoteRow | null = Array.isArray(oq) ? (oq[0] ?? null) : (oq ?? null);
+
+      if (!q) counters.dropped.noQuote++;
+      else counters.quotePresent++;
+
+      const bid = q?.bid ?? 0;
+      const ask = q?.ask ?? 0;
+      const iv = q?.iv ?? 0;
+      const oi = q?.oi ?? 0;
+      const vol = q?.vol ?? 0;
+      const delta = q?.delta ?? undefined;
+      const lastQuoteAt = q?.updated_at ?? undefined;
+
+      return {
+        id: r.id,
+        strike: r.strike,
+        expiry: r.expiry,
+        dte,
+        bid,
+        ask,
+        iv,
+        oi,
+        vol,
+        delta,
+        lastQuoteAt,
+      } as Mapped;
+    });
+
+    const inWindow: Mapped[] = mapped.filter((c) => c.dte >= dteMin && c.dte <= dteMax);
+    counters.dteFiltered = inWindow.length;
+
+    const quality: Mapped[] = inWindow.filter((c) => {
+      if (c.ask <= 0) {
+        counters.dropped.zeroAsk++;
+        return false;
+      }
+      if (c.iv <= 0) {
+        counters.dropped.zeroIv++;
+        return false;
+      }
+      if (c.oi <= 0) {
+        counters.dropped.zeroOi++;
+        return false;
+      }
+      if (dropStale) {
+        const ageMin = c.lastQuoteAt
+          ? (now.getTime() - Date.parse(c.lastQuoteAt)) / 60000
+          : Infinity;
+        if (ageMin > staleMaxMin) {
+          counters.dropped.stale++;
+          return false;
+        }
+      }
+      return true;
+    });
+    counters.quoteQualityPass = quality.length;
+
+    let spot = spotParam || 0;
+
+    if (!spot) {
+      const { data: px } = await supabase
+        .from("price_history")
+        .select("close_price, datetime")
+        .eq("symbol", symbol)
+        .order("datetime", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (px?.close_price) spot = Number(px.close_price) || 0;
+    }
 
     const ranked = rankOptions({
       side,
-      contracts,
+      contracts: quality,
       spot,
       r,
       ivHistory,
@@ -138,6 +219,8 @@ serve(async (req: Request) => {
       dteMin,
       dteMax,
       count: ranked.length,
+      spotUsed: spot,
+      ...(debug ? { debug: counters } : {}),
       results: ranked,
     });
   } catch (e) {
