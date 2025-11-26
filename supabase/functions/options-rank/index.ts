@@ -4,6 +4,25 @@ import { serve } from "std/http/server";
 import { createClient } from "@supabase/supabase-js";
 import { rankOptions, type Contract, type Side } from "../../../packages/options-math-ts/index.ts";
 
+type IVRow = { iv_30d: number };
+
+type QuoteRow = {
+  bid: number | null;
+  ask: number | null;
+  iv: number | null;
+  delta: number | null;
+  oi: number | null;
+  vol: number | null;
+};
+
+type OptionRow = {
+  id: number;
+  right: "C" | "P";
+  strike: number;
+  expiry: string;
+  options_quotes: QuoteRow[] | null;
+};
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -62,7 +81,7 @@ serve(async (req: Request) => {
 
     if (ivErr) return json({ ok: false, error: String(ivErr) }, 500);
 
-    const ivHistory = (ivh ?? []).map((x: any) => x.iv_30d as number);
+    const ivHistory = ((ivh as IVRow[] | null) ?? []).map((x) => x.iv_30d);
 
     const { data: rows, error: rowsErr } = await supabase
       .from("options_contracts")
@@ -74,27 +93,30 @@ serve(async (req: Request) => {
     if (rowsErr) return json({ ok: false, error: String(rowsErr) }, 500);
 
     const now = new Date();
-    const contracts: Contract[] = (rows ?? [])
-      .filter((r: any) => r.right === (side === "call" ? "C" : "P"))
-      .map((r: any) => {
+    const rawRows = ((rows as OptionRow[] | null) ?? []);
+
+    const contracts: Contract[] = rawRows
+      .filter((r) => r.right === (side === "call" ? "C" : "P"))
+      .map((r) => {
         const dte = Math.max(
           0,
           Math.round((Date.parse(r.expiry) - now.getTime()) / 86400000),
         );
+        const q = r.options_quotes?.[0];
         return {
           id: r.id,
           strike: r.strike,
           expiry: r.expiry,
           dte,
-          bid: r.options_quotes?.bid ?? 0,
-          ask: r.options_quotes?.ask ?? 0,
-          iv: r.options_quotes?.iv ?? 0,
-          oi: r.options_quotes?.oi ?? 0,
-          vol: r.options_quotes?.vol ?? 0,
-          delta: r.options_quotes?.delta ?? undefined,
+          bid: q?.bid ?? 0,
+          ask: q?.ask ?? 0,
+          iv: q?.iv ?? 0,
+          oi: q?.oi ?? 0,
+          vol: q?.vol ?? 0,
+          delta: q?.delta ?? undefined,
         } satisfies Contract;
       })
-      .filter((c: Contract) => c.dte >= dteMin && c.dte <= dteMax);
+      .filter((c) => c.dte >= dteMin && c.dte <= dteMax);
 
     const spot = spotParam || 0;
 
