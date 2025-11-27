@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Routes, Route, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { BarChart3 } from 'lucide-react';
 import { SkipLinks } from './components/SkipLinks';
@@ -9,6 +9,8 @@ import { SearchBar } from './components/SearchBar';
 import { BreadcrumbsWithSchema } from './components/Breadcrumbs';
 import { SiteFooter } from './components/SiteFooter';
 import { NavLink, InternalLink } from './components/InternalLink';
+import { OptionsDockProvider, useOptionsDock } from '@/contexts/OptionsDockContext';
+import OptionsDock from '@/components/options/OptionsDock';
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage').then(m => ({ default: m.WatchlistPage })));
 const MarketsPage = lazy(() => import('./pages/MarketsPage').then(m => ({ default: m.MarketsPage })));
@@ -19,8 +21,8 @@ const ScreenerPage = lazy(() => import('./pages/ScreenerPage').then(m => ({ defa
 const AlertsPage = lazy(() => import('./pages/AlertsPage').then(m => ({ default: m.AlertsPage })));
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })));
 const LiveChartDemoPage = lazy(() => import('./pages/LiveChartDemoPage').then(m => ({ default: m.LiveChartDemoPage })));
-const ChartWorkspacePage = lazy(() => import('./pages/ChartWorkspace').then(m => ({ default: m.default || m.ChartWorkspace })));
-const OptionsPage = lazy(() => import('./pages/OptionsPage').then(m => ({ default: m.default || m.OptionsPage })));
+const ChartWorkspacePage = lazy(() => import('./pages/ChartWorkspace'));
+const OptionsPage = lazy(() => import('./pages/OptionsPage'));
 const HelpPage = lazy(() => import('./pages/HelpPage').then(m => ({ default: m.HelpPage })));
 const HelpGettingStartedPage = lazy(() => import('./pages/help/GettingStartedPage').then(m => ({ default: m.HelpGettingStartedPage })));
 const HelpIndicatorsPage = lazy(() => import('./pages/help/IndicatorsGuidePage').then(m => ({ default: m.HelpIndicatorsPage })));
@@ -53,6 +55,8 @@ function App() {
   const [selectedSymbol, setSelectedSymbol] = useState<string>(() => readInitialSymbol());
   const navigate = useNavigate();
   const location = useLocation();
+  const optionsDock = useOptionsDock();
+  const optionsBtnRef = useRef<HTMLButtonElement | null>(null);
 
   const handleSymbolChange = useCallback(
     (symbol: string, options: { navigate?: boolean } = {}) => {
@@ -69,20 +73,23 @@ function App() {
     [location.pathname, navigate]
   );
 
+  const dockOpen = optionsDock.open;
+
   const navItems = useMemo(
     () => [
       {
         label: 'Dashboard',
         to: ROUTES.home(),
-        isActive: location.pathname === '/' || location.pathname.startsWith('/stocks')
+        isActive: location.pathname === '/' || location.pathname.startsWith('/stocks'),
+        kind: 'link' as const,
       },
-      { label: 'Watchlist', to: ROUTES.watchlist(), isActive: location.pathname.startsWith('/watchlist') },
-      { label: 'Markets', to: ROUTES.markets(), isActive: location.pathname.startsWith('/markets') },
-      { label: 'Compare', to: ROUTES.compare(), isActive: location.pathname.startsWith('/compare') },
-      { label: 'Options', to: '/options', isActive: location.pathname.startsWith('/options') },
-      { label: 'Help', to: ROUTES.help(), isActive: location.pathname.startsWith('/help') },
+      { label: 'Watchlist', to: ROUTES.watchlist(), isActive: location.pathname.startsWith('/watchlist'), kind: 'link' as const },
+      { label: 'Markets', to: ROUTES.markets(), isActive: location.pathname.startsWith('/markets'), kind: 'link' as const },
+      { label: 'Compare', to: ROUTES.compare(), isActive: location.pathname.startsWith('/compare'), kind: 'link' as const },
+      { label: 'Options', to: '/options', isActive: optionsDock.open, kind: 'options' as const },
+      { label: 'Help', to: ROUTES.help(), isActive: location.pathname.startsWith('/help'), kind: 'link' as const },
     ],
-    [location.pathname]
+    [location.pathname, dockOpen]
   );
 
   return (
@@ -93,7 +100,11 @@ function App() {
       <PWAUpdateNotification />
       <GlobalStructuredData />
 
-      <header className="border-b border-slate-900 bg-slate-950/95 backdrop-blur-sm sticky top-0 z-40" role="banner">
+      <header
+        id="app-header"
+        className="border-b border-slate-900 bg-slate-950/95 backdrop-blur-sm sticky top-0 z-40"
+        role="banner"
+      >
         <div className="container mx-auto px-4 py-4 space-y-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
@@ -106,16 +117,40 @@ function App() {
               </div>
             </div>
             <nav aria-label="Primary" className="flex flex-wrap gap-4">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.label}
-                  to={item.to}
-                  active={item.isActive}
-                  className={`text-sm font-medium transition-colors ${item.isActive ? 'text-white' : 'text-slate-400 hover:text-slate-100'}`}
-                >
-                  {item.label}
-                </NavLink>
-              ))}
+              {navItems.map((item) => {
+                if (item.kind === 'options') {
+                  return (
+                    <button
+                      id="options-toggle"
+                      key={item.label}
+                      ref={optionsBtnRef}
+                      type="button"
+                      aria-controls="options-dock"
+                      aria-haspopup="dialog"
+                      aria-expanded={optionsDock.open}
+                      aria-pressed={optionsDock.open}
+                      onClick={() => optionsDock.setOpen((v) => !v)}
+                      className={`text-sm font-medium px-3 py-1 rounded transition-colors ${
+                        optionsDock.open
+                          ? 'bg-slate-800 text-white'
+                          : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-100'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                }
+                return (
+                  <NavLink
+                    key={item.label}
+                    to={item.to}
+                    active={item.isActive}
+                    className={`text-sm font-medium transition-colors ${item.isActive ? 'text-white' : 'text-slate-400 hover:text-slate-100'}`}
+                  >
+                    {item.label}
+                  </NavLink>
+                );
+              })}
             </nav>
           </div>
           <div role="search" aria-label="Global symbol search">
@@ -206,11 +241,30 @@ function App() {
       </main>
 
       <SiteFooter />
+      <OptionsDock triggerRef={optionsBtnRef} />
     </div>
   );
 }
 
-export default App;
+export default function AppWithProviders() {
+  return (
+    <OptionsDockProvider>
+      <RouteCloseOptionsDock />
+      <App />
+    </OptionsDockProvider>
+  );
+}
+
+function RouteCloseOptionsDock() {
+  const location = useLocation();
+  const { setOpen } = useOptionsDock();
+
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname, setOpen]);
+
+  return null;
+}
 
 interface RoutedDashboardPageProps {
   selectedSymbol: string;

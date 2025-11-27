@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import Tooltip from '@/components/ui/Tooltip';
+import { GradeBadge } from '@/components/options/GradeBadge';
 
 export type RankedRow = {
   rank: number;
@@ -13,7 +15,9 @@ export type RankedRow = {
     iv: number;
     oi: number;
     vol: number;
+    lastQuoteAt?: string;
     side: 'call' | 'put';
+    delta?: number;
   };
   theo: number;
   ivp: number;
@@ -24,50 +28,337 @@ export type RankedRow = {
   adjustments: string[];
 };
 
-export default function OptionsPage() {
+type RankDebug = {
+  total: number;
+  sideFiltered: number;
+  dteFiltered: number;
+  quotePresent: number;
+  quoteQualityPass: number;
+  dropped: {
+    noQuote: number;
+    zeroAsk: number;
+    zeroIv: number;
+    zeroOi: number;
+    stale: number;
+  };
+};
+
+const fmtDate = (iso?: string) =>
+  iso ? new Date(iso).toLocaleDateString() : '—';
+
+const pct = (x?: number) => `${Math.round((x ?? 0) * 100)}%`;
+
+const spreadPct = (bid?: number, ask?: number) => {
+  const b = bid ?? 0;
+  const a = ask ?? 0;
+  return a > 0 ? (a - b) / a : 0;
+};
+
+// ---- Column help text (short + clear) ----
+const COL_HINTS: Record<string, string> = {
+  grade: 'Letter grade derived from the finalScore (A=best).',
+  strike: 'Option strike price.',
+  expiry: 'Contract expiration date.',
+  dte: 'Days to expiration (calendar days).',
+  theo: 'Model theoretical value for the contract.',
+  bid: 'Best bid price.',
+  ask: 'Best ask price.',
+  spread: 'Relative spread = (Ask − Bid) / Ask.',
+  iv: 'Implied volatility of the option.',
+  ivp: 'IV Percentile vs recent IV history.',
+  oi: 'Open interest (open contracts).',
+  vol: 'Today’s traded volume.',
+};
+
+function useSymbolSearch(query: string) {
+  const [hits, setHits] = useState<
+    { symbol: string; name?: string; exchange?: string }[]
+  >([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setHits([]);
+      return;
+    }
+
+    const ac = new AbortController();
+    const t = window.setTimeout(async () => {
+      try {
+        setBusy(true);
+        const r = await fetch(
+          `/api/stock-search?q=${encodeURIComponent(q)}&limit=8`,
+          { signal: ac.signal },
+        );
+        const ct = r.headers.get('content-type') || '';
+        const j = ct.includes('json') ? await r.json() : null;
+        setHits(Array.isArray(j?.results) ? j.results : []);
+      } catch {
+        // ignore
+      } finally {
+        setBusy(false);
+      }
+    }, 200);
+
+    return () => {
+      ac.abort();
+      window.clearTimeout(t);
+    };
+  }, [query]);
+
+  return { hits, busy };
+}
+
+// ---- Minimal styled tooltip TH ----
+function Th({
+  label,
+  hint,
+  className = '',
+  align = 'left',
+}: {
+  label: string;
+  hint?: string;
+  className?: string;
+  align?: 'left' | 'center' | 'right';
+}) {
+  const alignClass =
+    align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
+
+  return (
+    <th
+      className={[
+        'px-2 py-2 sticky top-0 z-10 bg-slate-900/95 border-b border-slate-800',
+        'text-[11px] uppercase text-slate-400',
+        alignClass,
+        className,
+      ].join(' ')}
+    >
+      {hint ? (
+        <Tooltip content={hint}>
+          <span className="inline-flex items-center gap-1">
+            <span>{label}</span>
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-slate-500/60"
+              aria-hidden
+            />
+          </span>
+        </Tooltip>
+      ) : (
+        <span>{label}</span>
+      )}
+    </th>
+  );
+}
+
+// util: safe JSON-or-text
+async function jsonOrText(res: Response) {
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) return await res.json();
+  return { ok: false, error: await res.text() };
+}
+
+// optional auth header (some schwab* routes may require it)
+async function authHeaders(): Promise<Record<string, string>> {
+  try {
+    const { supabase } = await import('@/lib/supabaseClient');
+    const { data } = await supabase.auth.getSession();
+    const tok = data?.session?.access_token;
+    const headers: Record<string, string> = {};
+    if (tok) headers.Authorization = `Bearer ${tok}`;
+    return headers;
+  } catch {
+    return {};
+  }
+}
+
+// warms instrument + full chain so rank won't say "unknown symbol"
+async function warmOptionData(symbol: string): Promise<string | null> {
+  const sym = symbol.trim().toUpperCase();
+  if (!sym) return null;
+  const auth = await authHeaders();
+
+  // 1) resolve canonical via stock-search (keeps UX happy even if user typed alias)
+  const r0 = await fetch(`/api/stock-search?q=${encodeURIComponent(sym)}&limit=1`);
+  const j0 = await jsonOrText(r0);
+  const canonical = (j0 as any)?.results?.[0]?.symbol || sym;
+
+  // 2) prime instruments (provider catalog)
+  await fetch(`/api/schwab-instruments?symbol=${encodeURIComponent(canonical)}`, {
+    headers: auth,
+  });
+
+  // 3) prime the *entire* chain (set a wide DTE window)
+  await fetch(
+    `/api/schwab-option-chains?symbol=${encodeURIComponent(
+      canonical,
+    )}&dteMin=0&dteMax=1500&prefetch=1`,
+    { headers: auth },
+  );
+
+  return canonical;
+}
+
+// --- Market-hours helpers (US equities) ---
+function isUSMarketOpen(d = new Date()) {
+  const ny = new Date(
+    d.toLocaleString('en-US', { timeZone: 'America/New_York' }),
+  );
+  const day = ny.getDay();
+  if (day === 0 || day === 6) return false;
+
+  const minutes = ny.getHours() * 60 + ny.getMinutes();
+  const open = 9 * 60 + 30;
+  const close = 16 * 60;
+  return minutes >= open && minutes < close;
+}
+
+function nextUSMarketOpen(from = new Date()) {
+  const ny = new Date(
+    from.toLocaleString('en-US', { timeZone: 'America/New_York' }),
+  );
+
+  const target = new Date(ny);
+  target.setHours(9, 30, 0, 0);
+
+  const day = ny.getDay();
+  const minutes = ny.getHours() * 60 + ny.getMinutes();
+  const open = 9 * 60 + 30;
+  const close = 16 * 60;
+
+  if (day === 0) {
+    target.setDate(target.getDate() + 1);
+  } else if (day === 6) {
+    target.setDate(target.getDate() + 2);
+  } else if (minutes >= close) {
+    target.setDate(target.getDate() + 1);
+    while ([0, 6].includes(target.getDay())) target.setDate(target.getDate() + 1);
+  } else if (minutes >= open) {
+    return null;
+  }
+  return target;
+}
+
+function fmtNY(dt: Date | null) {
+  if (!dt) return '';
+  return dt.toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+    day: '2-digit',
+  });
+}
+
+export function OptionsPanel() {
   const [symbol, setSymbol] = useState('AAPL');
+  const [symInput, setSymInput] = useState('AAPL');
+  const [comboOpen, setComboOpen] = useState(false);
+  const [highlight, setHighlight] = useState<number>(-1);
+  const { hits: symHits } = useSymbolSearch(symInput);
   const [side, setSide] = useState<'call' | 'put'>('call');
   const [dteMin, setDteMin] = useState(45);
   const [dteMax, setDteMax] = useState(90);
   const [rows, setRows] = useState<RankedRow[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [debug, setDebug] = useState<RankDebug | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const [expiryBias, setExpiryBias] = useState(0);
   const [selected, setSelected] = useState<number[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const lastWarmedRef = useRef<string | null>(null);
+  const [hoverCtx, setHoverCtx] = useState<{ id: number; x: number; y: number } | null>(
+    null,
+  );
 
-  async function runRank() {
-    setLoading(true);
-    try {
+  const marketOpen = isUSMarketOpen();
+  const nextOpen = marketOpen ? null : nextUSMarketOpen();
+
+  useEffect(() => {
+    setSymbol(symInput.trim().toUpperCase());
+  }, [symInput]);
+
+  useEffect(() => {
+    if (!comboOpen || symHits.length === 0) {
+      setHighlight(-1);
+      return;
+    }
+    if (highlight >= symHits.length) {
+      setHighlight(symHits.length - 1);
+    }
+  }, [comboOpen, symHits, highlight]);
+
+  const handleRank = useCallback(async () => {
+    const upper = symbol.trim().toUpperCase();
+
+    async function fetchRank() {
       const qs = new URLSearchParams({
-        symbol,
+        symbol: upper,
         side,
-        dteMin: String(dteMin),
-        dteMax: String(dteMax),
+        dteMin: String(dteMin ?? 0),
+        dteMax: String(dteMax ?? 400),
         top: '50',
-      });
-      const res = await fetch(`/api/options-rank?${qs.toString()}`);
-      const json = await res.json();
-      setRows((json?.results ?? []) as RankedRow[]);
-    } catch {
-      setRows(null);
+        r: '0.045',
+        debug: '1',
+        staleMaxMin: marketOpen ? '60' : String(3 * 24 * 60),
+      }).toString();
+      const res = await fetch(`/api/options-rank?${qs}`);
+      return await jsonOrText(res);
+    }
+
+    try {
+      setLoading(true);
+      setErr(null);
+      setDebug(null);
+
+      // warm once per symbol (covers "type + click Rank" path)
+      if (upper && lastWarmedRef.current !== upper) {
+        setStatus(
+          marketOpen
+            ? 'Warming option chain…'
+            : 'Market closed – warming latest chain…',
+        );
+        const canon = await warmOptionData(upper);
+        lastWarmedRef.current = canon ?? upper;
+        // tiny pause gives the cache a chance to populate
+        await new Promise((r) =>
+          setTimeout(r, marketOpen ? 250 : 500),
+        );
+        setStatus(null);
+      }
+
+      let payload: any = await fetchRank();
+
+      // safety net: warm + retry if backend still complains
+      const unknownRe = /(unknown|not\s*found|no\s*chain)/i;
+      if (!payload.ok && unknownRe.test(payload.error || '')) {
+        setStatus(
+          marketOpen
+            ? 'Warming option chain…'
+            : 'Market closed – warming latest chain…',
+        );
+        const canon = await warmOptionData(upper);
+        lastWarmedRef.current = canon ?? upper;
+        setStatus(null);
+        await new Promise((r) => setTimeout(r, 800));
+        payload = await fetchRank();
+      }
+
+      if (!payload.ok) throw new Error(payload.error || 'Rank failed');
+
+      setRows((payload.results ?? []) as RankedRow[]);
+      setDebug((payload.debug as RankDebug) || null);
+    } catch (e: any) {
+      setRows([]);
+      setErr(e?.message ?? String(e));
+      setDebug(null);
     } finally {
       setLoading(false);
     }
-  }
-
-  const grouped = useMemo(() => {
-    if (!rows) return [] as RankedRow[][];
-    const map = new Map<number, RankedRow[]>();
-    for (const r of rows) {
-      const key = Math.round(r.contract.strike * 100);
-      const arr = map.get(key) || [];
-      arr.push(r);
-      map.set(key, arr);
-    }
-    return Array.from(map.values()).map((group) =>
-      group.slice().sort((a, b) => a.contract.dte - b.contract.dte),
-    );
-  }, [rows]);
+  }, [symbol, side, dteMin, dteMax, marketOpen]);
 
   const medianDte = useMemo(() => {
     if (!rows || rows.length === 0) return 1;
@@ -102,42 +393,170 @@ export default function OptionsPage() {
     setDrawerOpen(selected.length > 0);
   }, [selected]);
 
+  const quoteAgeMinutes = useMemo(() => {
+    if (!rows || selected.length === 0) return null;
+    const selectedRows = rows.filter((r) => selected.includes(r.contract.id));
+    const timestamps = selectedRows
+      .map((r) => r.contract.lastQuoteAt)
+      .filter(Boolean) as string[];
+    if (timestamps.length === 0) return null;
+    const latestMs = Math.max(...timestamps.map((t) => Date.parse(t)));
+    const ageMin = Math.max(0, Math.round((Date.now() - latestMs) / 60000));
+    return ageMin;
+  }, [rows, selected]);
+
+  const quoteAgeLabel = useMemo(() => {
+    if (quoteAgeMinutes == null) return null;
+    if (quoteAgeMinutes === 0) return '<1m old';
+    if (quoteAgeMinutes === 1) return '1m old';
+    return `${quoteAgeMinutes}m old`;
+  }, [quoteAgeMinutes]);
+
   return (
-    <div className="p-4 space-y-4">
-      <h1 className="text-xl font-semibold">Options Ranking</h1>
+    <div className="space-y-4">
+      <h2
+        className="text-xl font-semibold"
+        title="Ranks listed options by our finalScore using IV history, earnings timing, liquidity and edge"
+      >
+        Options Ranking
+      </h2>
       <div className="flex flex-wrap gap-3 items-end">
-        <label className="text-sm flex flex-col gap-1">
+        <label className="text-sm flex flex-col gap-1 w-full sm:w-auto">
           <span>Symbol</span>
-          <input
-            className="rounded bg-slate-900 px-2 py-1 border border-slate-700"
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-          />
+          <div className="relative">
+            <input
+              role="combobox"
+              aria-expanded={comboOpen}
+              aria-controls="symbol-listbox"
+              aria-activedescendant={highlight >= 0 ? `symopt-${highlight}` : undefined}
+              aria-autocomplete="list"
+              placeholder="AAPL, CRWD, TSLA\x19"
+              className="w-[220px] rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm"
+              value={symInput}
+              onChange={(e) => {
+                setSymInput(e.target.value);
+                setComboOpen(true);
+              }}
+              onFocus={() => setComboOpen(true)}
+              onBlur={() => {
+                window.setTimeout(() => setComboOpen(false), 120);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown' && symHits.length > 0) {
+                  e.preventDefault();
+                  setComboOpen(true);
+                  setHighlight((i) => {
+                    const next = i + 1;
+                    return next >= symHits.length ? symHits.length - 1 : next;
+                  });
+                  return;
+                }
+                if (e.key === 'ArrowUp' && symHits.length > 0) {
+                  e.preventDefault();
+                  setComboOpen(true);
+                  setHighlight((i) => {
+                    const next = i - 1;
+                    return next < 0 ? 0 : next;
+                  });
+                  return;
+                }
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (highlight >= 0 && highlight < symHits.length) {
+                    const h = symHits[highlight];
+                    setSymInput(h.symbol);
+                    setComboOpen(false);
+                    (async () => {
+                      setStatus(
+                        marketOpen
+                          ? 'Warming option chain…'
+                          : 'Market closed – warming latest chain…',
+                      );
+                      const canon = await warmOptionData(h.symbol);
+                      lastWarmedRef.current = canon ?? h.symbol;
+                      if (!marketOpen) {
+                        await new Promise((r) => setTimeout(r, 500));
+                      }
+                      setStatus(null);
+                      handleRank();
+                    })();
+                  } else {
+                    handleRank();
+                  }
+                }
+              }}
+            />
+            {comboOpen && symHits.length > 0 && (
+              <ul
+                id="symbol-listbox"
+                role="listbox"
+                className="absolute z-[9999] mt-1 max-h-64 w-[360px] overflow-auto rounded border border-slate-700 bg-slate-900 shadow-2xl"
+              >
+                {symHits.map((h, i) => (
+                  <li
+                    id={`symopt-${i}`}
+                    key={h.symbol}
+                    role="option"
+                    aria-selected={i === highlight ? true : undefined}
+                    className={`flex cursor-pointer items-center gap-2 px-2 py-1 text-sm ${
+                      i === highlight ? 'bg-slate-800' : 'hover:bg-slate-800'
+                    }`}
+                    onMouseEnter={() => setHighlight(i)}
+                    onMouseDown={async () => {
+                      setSymInput(h.symbol);
+                      setComboOpen(false);
+                      setStatus(
+                        marketOpen
+                          ? 'Warming option chain…'
+                          : 'Market closed – warming latest chain…',
+                      );
+                      const canon = await warmOptionData(h.symbol);
+                      lastWarmedRef.current = canon ?? h.symbol;
+                      if (!marketOpen) {
+                        await new Promise((r) => setTimeout(r, 500));
+                      }
+                      setStatus(null);
+                      handleRank();
+                    }}
+                  >
+                    <span className="font-mono">{h.symbol}</span>
+                    <span className="text-slate-400">{h.name}</span>
+                    {h.exchange && (
+                      <span className="ml-auto text-slate-500">{h.exchange}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </label>
-        <label className="text-sm flex flex-col gap-1">
+        <label className="text-sm flex flex-col gap-1 w-full sm:w-auto">
           <span>Side</span>
           <select
-            className="rounded bg-slate-900 px-2 py-1 border border-slate-700"
+            className="w-full rounded bg-slate-900 px-2 py-1 border border-slate-700"
             value={side}
-            onChange={(e) => setSide(e.target.value as 'call' | 'put')}
+            onChange={(e) => {
+              const v = e.target.value === 'put' ? 'put' : 'call';
+              setSide(v);
+            }}
           >
             <option value="call">Calls</option>
             <option value="put">Puts</option>
           </select>
         </label>
-        <label className="text-sm flex flex-col gap-1">
+        <label className="text-sm flex flex-col gap-1 w-full sm:w-auto">
           <span>DTE range</span>
           <div className="flex items-center gap-1">
             <input
               type="number"
-              className="w-20 rounded bg-slate-900 px-2 py-1 border border-slate-700"
+              className="w-full max-w-[4.5rem] rounded bg-slate-900 px-2 py-1 border border-slate-700"
               value={dteMin}
               onChange={(e) => setDteMin(Number(e.target.value) || 0)}
             />
             <span>–</span>
             <input
               type="number"
-              className="w-20 rounded bg-slate-900 px-2 py-1 border border-slate-700"
+              className="w-full max-w-[4.5rem] rounded bg-slate-900 px-2 py-1 border border-slate-700"
               value={dteMax}
               onChange={(e) => setDteMax(Number(e.target.value) || 0)}
             />
@@ -162,7 +581,7 @@ export default function OptionsPage() {
         </label>
         <button
           type="button"
-          onClick={runRank}
+          onClick={handleRank}
           disabled={loading}
           className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white hover:bg-emerald-500 disabled:opacity-60"
         >
@@ -170,105 +589,151 @@ export default function OptionsPage() {
         </button>
       </div>
 
-      <div className="overflow-auto border border-slate-800 rounded">
-        <table className="min-w-[960px] w-full text-sm">
-          <thead className="bg-slate-900/60">
-            <tr>
-              <th className="px-2 py-2 w-8"></th>
-              <th className="px-2 py-2 text-left">Grade</th>
-              <th className="px-2 py-2 text-right">Score</th>
-              <th className="px-2 py-2 text-right">Strike</th>
-              <th className="px-2 py-2 text-right">DTE</th>
-              <th className="px-2 py-2 text-right">Bid</th>
-              <th className="px-2 py-2 text-right">Ask</th>
-              <th className="px-2 py-2 text-right">Spread%</th>
-              <th className="px-2 py-2 text-right">IV</th>
-              <th className="px-2 py-2 text-right">IVP</th>
-              <th className="px-2 py-2 text-right">Edge%</th>
-              <th className="px-2 py-2 text-left">Adj / Gates</th>
-            </tr>
-          </thead>
-          <tbody>
-            {grouped.map((group, gi) => (
-              <tr key={gi}>
-                <td colSpan={11} className="p-0">
-                  <table className="w-full">
-                    <tbody>
-                      {group
-                        .slice()
-                        .sort((a, b) => biasedScore(b) - biasedScore(a))
-                        .map((r) => {
-                        const mid = (r.contract.bid + r.contract.ask) / 2;
-                        const spreadPct = mid > 0 ? ((r.contract.ask - r.contract.bid) / mid) * 100 : 100;
-                        const edgePct =
-                          r.contract.ask > 0
-                            ? ((r.theo - r.contract.ask) / r.contract.ask) * 100
-                            : 0;
-                        const displayScore = biasedScore(r);
-                        return (
-                          <tr
-                            key={`${r.contract.id ?? ''}-${r.contract.expiry}-${r.contract.dte}`}
-                            className="border-t border-slate-800"
-                          >
-                            <td className="px-2 py-1 text-center">
-                              <input
-                                type="checkbox"
-                                aria-label="Select contract for comparison"
-                                checked={selected.includes(r.contract.id)}
-                                onChange={() => toggleSelect(r.contract.id)}
-                              />
-                            </td>
-                            <td className="px-2 py-1 font-semibold">{r.grade}</td>
-                            <td className="px-2 py-1 text-right">
-                              {displayScore.toFixed(3)}
-                              {expiryBias !== 0 && (
-                                <span className="ml-1 text-[10px] text-slate-500">
-                                  raw {r.finalScore.toFixed(2)}
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-2 py-1 text-right">{r.contract.strike.toFixed(2)}</td>
-                            <td className="px-2 py-1 text-right">{r.contract.dte}</td>
-                            <td className="px-2 py-1 text-right">{r.contract.bid.toFixed(2)}</td>
-                            <td className="px-2 py-1 text-right">{r.contract.ask.toFixed(2)}</td>
-                            <td className="px-2 py-1 text-right">{spreadPct.toFixed(1)}%</td>
-                            <td className="px-2 py-1 text-right">{(r.contract.iv * 100).toFixed(1)}%</td>
-                            <td className="px-2 py-1 text-right">{(r.ivp * 100).toFixed(0)}%</td>
-                            <td className="px-2 py-1 text-right">{edgePct.toFixed(1)}%</td>
-                            <td className="px-2 py-1">
-                              <div className="flex flex-wrap gap-1">
-                                {r.adjustments.map((a) => (
-                                  <span key={a} className="px-1.5 py-0.5 rounded bg-slate-800">
-                                    {a}
-                                  </span>
-                                ))}
-                                {r.gate.reasons.length > 0 && (
-                                  <span className="px-1.5 py-0.5 rounded bg-amber-900/50">
-                                    {r.gate.reasons.join(', ')}
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </td>
-              </tr>
-            ))}
-            {!rows?.length && (
-              <tr>
-                <td
-                  colSpan={11}
-                  className="px-2 py-6 text-center text-slate-500"
+      <div aria-live="polite" className="sr-only" id="options-status">
+        {status || err || ''}
+      </div>
+
+      {!marketOpen && (
+        <div className="mt-1 text-[11px] text-slate-500">
+          Market closed – using last available quotes.
+          {nextOpen ? <> Next open: {fmtNY(nextOpen)} (ET).</> : null}
+        </div>
+      )}
+
+      {status && (
+        <div className="mt-1 text-[11px] text-slate-500">{status}</div>
+      )}
+
+      {debug && (
+        <div className="text-[11px] text-slate-500">
+          {debug.total} total {debug.quoteQualityPass} quote ok {debug.dropped.stale} stale{' '}
+          {debug.dropped.noQuote + debug.dropped.zeroAsk + debug.dropped.zeroIv + debug.dropped.zeroOi + debug.dropped.stale}{' '}
+          dropped
+        </div>
+      )}
+
+      <div className="border border-slate-800 rounded-lg h-full">
+        <div
+          ref={wrapRef}
+          className="relative h-full overflow-y-auto"
+        >
+          <div className="overflow-x-auto overscroll-x-contain">
+            <table className="min-w-[1100px] w-full text-sm whitespace-nowrap">
+              <thead>
+                <tr>
+                  <Th label="" />
+                  <Th label="Grade" hint={COL_HINTS.grade} />
+                  <Th
+                    label="Strike"
+                    hint={COL_HINTS.strike}
+                    align="right"
+                  />
+                  <Th
+                    label="Expiry"
+                    hint={COL_HINTS.expiry}
+                    align="center"
+                  />
+                  <Th label="DTE" hint={COL_HINTS.dte} align="right" />
+                  <Th label="Theo" hint={COL_HINTS.theo} align="right" />
+                  <Th label="Bid" hint={COL_HINTS.bid} align="right" />
+                  <Th label="Ask" hint={COL_HINTS.ask} align="right" />
+                  <Th
+                    label="Spread"
+                    hint={COL_HINTS.spread}
+                    align="right"
+                  />
+                  <Th label="IV" hint={COL_HINTS.iv} align="right" />
+                  <Th label="IVP" hint={COL_HINTS.ivp} align="right" />
+                  <Th label="OI" hint={COL_HINTS.oi} align="right" />
+                  <Th label="Vol" hint={COL_HINTS.vol} align="right" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {rows?.map((r) => (
+                  <tr
+                    key={r.contract.id}
+                    className="odd:bg-slate-900/40 hover:bg-slate-900/70"
+                    onMouseEnter={(e) =>
+                      setHoverCtx({ id: r.contract.id, x: e.clientX, y: e.clientY })
+                    }
+                    onMouseMove={(e) =>
+                      setHoverCtx({ id: r.contract.id, x: e.clientX, y: e.clientY })
+                    }
+                    onMouseLeave={() => setHoverCtx(null)}
+                  >
+                    <td className="text-center px-2 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(r.contract.id)}
+                        onChange={() => toggleSelect(r.contract.id)}
+                        aria-label="Select contract"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      {r.grade ? (
+                        <GradeBadge
+                          grade={r.grade as 'A' | 'B' | 'C' | 'D'}
+                          score={r.finalScore}
+                          scores={r.scores}
+                          adjustments={r.adjustments}
+                        />
+                      ) : (
+                        <span className="text-xs text-slate-500">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2 text-right">{r.contract.strike.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-center">
+                      {fmtDate(r.contract.expiry)}
+                    </td>
+                    <td className="px-2 py-2 text-right">{r.contract.dte}</td>
+                    <td className="px-2 py-2 text-right">{r.theo?.toFixed(2) ?? '—'}</td>
+                    <td className="px-2 py-2 text-right">{r.contract.bid.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-right">{r.contract.ask.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-right">
+                      {pct(spreadPct(r.contract.bid, r.contract.ask))}
+                    </td>
+                    <td className="px-2 py-2 text-right">{pct(r.contract.iv)}</td>
+                    <td className="px-2 py-2 text-right">{pct(r.ivp ?? 0)}</td>
+                    <td className="px-2 py-2 text-right">{r.contract.oi}</td>
+                    <td className="px-2 py-2 text-right">{r.contract.vol}</td>
+                  </tr>
+                ))}
+                {!loading && (!rows || rows.length === 0) && (
+                  <tr>
+                    <td
+                      colSpan={13}
+                      className="px-2 py-6 text-center text-slate-500"
+                    >
+                      {err ? (
+                        <span className="text-red-400">{err}</span>
+                      ) : (
+                        'Run a rank to see results.'
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {hoverCtx && rows && (
+            (() => {
+              const rect = wrapRef.current?.getBoundingClientRect();
+              const row = rows.find((rr) => rr.contract.id === hoverCtx.id);
+              if (!rect || !row) return null;
+              const left = Math.max(12, hoverCtx.x - rect.left + 12);
+              const top = Math.max(12, hoverCtx.y - rect.top + 12);
+              return (
+                <div
+                  className="pointer-events-none absolute z-50"
+                  style={{ left, top }}
                 >
-                  Run a rank to see results.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                  <FactorsCard row={row} />
+                </div>
+              );
+            })()
+          )}
+        </div>
       </div>
 
       {/* Compare Drawer */}
@@ -276,7 +741,14 @@ export default function OptionsPage() {
         className={`fixed top-0 right-0 h-full w-[380px] bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-800 transition-transform duration-300 ${drawerOpen ? 'translate-x-0' : 'translate-x-full'}`}
       >
         <div className="p-3 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
-          <div className="text-sm font-medium">Compare ({selected.length})</div>
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-medium">Compare ({selected.length})</div>
+            {quoteAgeLabel && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                quotes {quoteAgeLabel}
+              </span>
+            )}
+          </div>
           <div className="flex gap-2">
             <button
               className="text-xs px-2 py-1 rounded border"
@@ -338,6 +810,66 @@ export default function OptionsPage() {
           <SaveWatchlistForm selected={selected} onSaved={clearSelected} />
         </div>
       </div>
+    </div>
+  );
+}
+
+export default function OptionsPage() {
+  return (
+    <main className="p-4">
+      <OptionsPanel />
+    </main>
+  );
+}
+
+function FactorsCard({ row }: { row: RankedRow }) {
+  const entries = Object.entries(row.scores || {});
+  const scores = entries
+    .sort((a, b) => (b[1] as number) - (a[1] as number))
+    .slice(0, 4);
+
+  const labels: Record<string, string> = {
+    edge: 'Edge (Theo vs Market)',
+    dte: 'Time Horizon Fit',
+    iv: 'Implied Volatility',
+    delta: 'Moneyness (Δ)',
+    liq: 'Liquidity (spread, OI, vol)',
+    cal: 'Calendar Fit',
+    earn: 'Earnings Timing',
+  };
+
+  return (
+    <div className="bg-slate-900/95 border border-slate-800 rounded-xl shadow-2xl backdrop-blur px-4 py-3 w-[260px]">
+      <div className="text-[12px] font-medium text-slate-200 mb-2">
+        Why this ranked
+      </div>
+      <div className="space-y-1">
+        {scores.map(([k, v]) => {
+          const val = typeof v === 'number' ? v : Number(v) || 0;
+          const pctVal = Math.round(val * 100);
+          return (
+            <div key={k} className="text-[11px] text-slate-300">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">{labels[k] || k}</span>
+                <span className="tabular-nums text-slate-200">{pctVal}%</span>
+              </div>
+              <div className="h-1.5 rounded bg-slate-800 overflow-hidden mt-1">
+                <div
+                  className="h-full bg-sky-500/80"
+                  style={{ width: `${Math.max(4, pctVal)}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {row.adjustments?.length ? (
+        <div className="mt-3 text-[10px] text-slate-300">
+          Adjustments:{' '}
+          <span className="text-slate-200">{row.adjustments.join(', ')}</span>
+        </div>
+      ) : null}
     </div>
   );
 }

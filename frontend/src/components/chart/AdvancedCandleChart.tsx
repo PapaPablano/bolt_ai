@@ -19,7 +19,7 @@ import { preprocessOhlcv } from '@/utils/preprocessOhlcv';
 import type { LinePt, StPerfParams } from '@/utils/indicators-supertrend-perf';
 import { assertBucketInvariant } from '@/utils/devInvariants';
 import { downsampleOhlcVisible } from '@/utils/ohlc-decimator';
-import { IndicatorPanel, type KdjPanelParams } from '@/components/IndicatorPanel';
+import type { KdjPanelParams } from '@/components/IndicatorPanel';
 import { fetchCalendar, type EconEvent } from '@/api/calendar';
 import { applyEventMarkers } from '@/components/chart/EconEventsOverlay';
 import { isWorkerIndicator, type PanelIndicatorName } from '@/types/indicators';
@@ -28,6 +28,7 @@ import { IndicatorMenu } from './IndicatorMenu';
 import { IntervalBar } from './IntervalBar';
 import { RangeBar } from './RangeBar';
 import { Button } from '@/components/ui/button';
+import { IndicatorTray, DEFAULT_INDICATORS, type IndicatorModel } from '@/components/indicators/IndicatorTray';
 import PaneKDJ from './PaneKDJ';
 import { genMockBars } from '@/utils/mock';
 import { mergePanePatch, shouldIgnoreLiveBar } from './mergePaneUtils';
@@ -437,6 +438,7 @@ export default function AdvancedCandleChart({
   const showKdjPane = indicatorToggles.KDJ;
 
   const [stylePrefs, setStylePrefs] = useState<IndicatorStylePrefs>(() => cloneIndicatorStylePrefs(prefs.styles));
+  const [indicatorTray, setIndicatorTray] = useState<IndicatorModel>(DEFAULT_INDICATORS);
 
   useEffect(() => {
     setStylePrefs(cloneIndicatorStylePrefs(prefs.styles));
@@ -1447,6 +1449,7 @@ export default function AdvancedCandleChart({
           <RangeBar value={range} onChange={(v) => setDefaultRange(v)} />
         </div>
         <div className="flex gap-2">
+          <IndicatorTray value={indicatorTray} onChange={setIndicatorTray} />
           <IndicatorMenu timeframe={tf} />
           <Button data-testid="btn-reset-view" variant="secondary" onClick={() => chartRef.current?.timeScale().fitContent()}>
             Reset view
@@ -1468,20 +1471,6 @@ export default function AdvancedCandleChart({
           Economic calendar unavailable: {calendarError}
         </div>
       )}
-
-      <IndicatorPanel
-        initial={indicatorPanelInitials}
-        toggles={indicatorToggles}
-        calendarToggleAllowed={env.CALENDAR_ENABLED}
-        onToggle={handleIndicatorToggle}
-        onSetStParams={handleStParamChange}
-        onSetBbParams={handleBbParamChange}
-        onSetMacdParams={handleMacdParamChange}
-        onSetVwapParams={handleVwapParamChange}
-        onSetKdjParams={handleKdjParamChange}
-        stylePrefs={stylePrefs}
-        onChangeStyles={handleStylePrefsChange}
-      />
 
       <div className="relative">
         <div

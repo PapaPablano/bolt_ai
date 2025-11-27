@@ -66,7 +66,6 @@ export function SearchBar({ onSelectSymbol }: SearchBarProps) {
           placeholder="Search stocks..."
           className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           aria-controls="search-results"
-          aria-expanded={showResults && results.length > 0}
           aria-autocomplete="list"
         />
         {isSearching && (
@@ -88,7 +87,7 @@ export function SearchBar({ onSelectSymbol }: SearchBarProps) {
               key={result.symbol}
               onClick={() => handleSelect(result.symbol)}
               role="option"
-              aria-selected="false"
+              aria-selected={undefined}
               className="w-full px-4 py-3 text-left hover:bg-slate-700 transition-colors border-b border-slate-700 last:border-b-0"
             >
               <div className="flex items-center justify-between">
