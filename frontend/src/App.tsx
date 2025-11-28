@@ -119,23 +119,27 @@ function App() {
             <nav aria-label="Primary" className="flex flex-wrap gap-4">
               {navItems.map((item) => {
                 if (item.kind === 'options') {
-                  return (
-                    <button
-                      id="options-toggle"
-                      key={item.label}
-                      ref={optionsBtnRef}
-                      type="button"
-                      aria-controls="options-dock"
-                      aria-haspopup="dialog"
-                      aria-expanded={optionsDock.open}
-                      aria-pressed={optionsDock.open}
-                      onClick={() => optionsDock.setOpen((v) => !v)}
-                      className={`text-sm font-medium px-3 py-1 rounded transition-colors ${
-                        optionsDock.open
-                          ? 'bg-slate-800 text-white'
-                          : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-100'
-                      }`}
-                    >
+                  const isOpen = optionsDock.open;
+                  const commonProps = {
+                    id: 'options-toggle',
+                    ref: optionsBtnRef,
+                    type: 'button' as const,
+                    'aria-controls': 'options-dock',
+                    'aria-haspopup': 'dialog' as const,
+                    onClick: () => optionsDock.setOpen((v) => !v),
+                    className: `text-sm font-medium px-3 py-1 rounded transition-colors ${
+                      isOpen
+                        ? 'bg-slate-800 text-white'
+                        : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-100'
+                    }`,
+                  };
+
+                  return isOpen ? (
+                    <button key={item.label} aria-expanded="true" aria-pressed="true" {...commonProps}>
+                      {item.label}
+                    </button>
+                  ) : (
+                    <button key={item.label} aria-expanded="false" aria-pressed="false" {...commonProps}>
                       {item.label}
                     </button>
                   );

@@ -4,7 +4,7 @@ import path from 'node:path';
 
 export default ({ mode }: { mode: string }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const EDGE_BASE = env.VITE_EDGE_BASE_URL || 'http://127.0.0.1:54321/functions/v1';
+  const EDGE_BASE = env.EDGE_BASE || env.VITE_EDGE_BASE_URL || 'http://127.0.0.1:54321/functions/v1';
 
   return defineConfig({
     plugins: [react()],
@@ -13,10 +13,11 @@ export default ({ mode }: { mode: string }) => {
       strictPort: false,
       open: true,
       proxy: {
-        '^/api/(options-rank|options-watchlist|stock-quote|indicators|regimes|alerts-evaluate|jobs-stai-batch)': {
+        // Proxy all /api/* calls to Edge (stock-*, options-*, schwab-*, indicators, etc.)
+        '^/api/(.*)$': {
           target: EDGE_BASE,
           changeOrigin: true,
-          rewrite: (p) => p.replace(/^\/api/, ''),
+          rewrite: (p) => p.replace(/^\/api\/?/, '/'),
         },
       },
     },
@@ -26,7 +27,8 @@ export default ({ mode }: { mode: string }) => {
       rollupOptions: {
         output: {
           manualChunks: {
-            vendor: ['react', 'react-dom'],
+            'vendor-react': ['react', 'react-dom'],
+            charts: ['lightweight-charts'],
           },
         },
       },

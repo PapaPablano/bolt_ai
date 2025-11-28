@@ -415,7 +415,13 @@ export default function AdvancedCandleChart({
     [pushWindowToWorker, tf],
   );
 
-    const stPanelDefaults = useMemo(() => buildStPerfParams(preset), [preset]);
+  const applyVisibleDecimationRef = useRef(applyVisibleDecimation);
+
+  useEffect(() => {
+    applyVisibleDecimationRef.current = applyVisibleDecimation;
+  }, [applyVisibleDecimation]);
+
+  const stPanelDefaults = useMemo(() => buildStPerfParams(preset), [preset]);
   const bbPanelDefaults = useMemo(() => ({ period: preset.bbPeriod, mult: preset.bbMult }), [preset.bbPeriod, preset.bbMult]);
   const macdPanelDefaults = useMemo(
     () => ({ fast: preset.macdFast ?? 12, slow: preset.macdSlow ?? 26, signal: preset.macdSignal ?? 9 }),
@@ -692,7 +698,7 @@ export default function AdvancedCandleChart({
 
   useEffect(() => {
     initialWindowSentRef.current = false;
-  }, [symbol, tf]);
+  }, [symbol]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -714,7 +720,7 @@ export default function AdvancedCandleChart({
       if (rangeThrottleRef.current != null) return;
       rangeThrottleRef.current = requestAnimationFrame(() => {
         rangeThrottleRef.current = null;
-        applyVisibleDecimation(next);
+        applyVisibleDecimationRef.current(next);
       });
     };
     scale.subscribeVisibleTimeRangeChange(handler);
@@ -725,7 +731,7 @@ export default function AdvancedCandleChart({
       }
       scale.unsubscribeVisibleTimeRangeChange(handler);
     };
-  }, [applyVisibleDecimation, pushWindowToWorker, range, symbol, tf]);
+  }, [applyVisibleDecimationRef, pushWindowToWorker, symbol]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -768,20 +774,6 @@ export default function AdvancedCandleChart({
 
     if (qaProbeEnabled) recordStage('container-mounted');
 
-    chartRef.current?.remove();
-    macdChartRef.current?.remove();
-    rsiChartRef.current?.remove();
-    chartRef.current = null;
-    macdChartRef.current = null;
-    rsiChartRef.current = null;
-    candleRef.current = null;
-    overlays.current = {};
-    overlaySeriesRef.current = {};
-    rsiSeriesRef.current = null;
-    macdLineRef.current = null;
-    macdSigRef.current = null;
-    macdHistRef.current = null;
-
     let zeroWidthObserver: ResizeObserver | null = null;
 
     try {
@@ -807,16 +799,13 @@ export default function AdvancedCandleChart({
       if (import.meta.env.DEV) console.debug('[chart] init complete');
 
       overlays.current = {};
-      if (preset.useSMA) overlays.current.sma = chart.addLineSeries({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
-      if (preset.useEMA) overlays.current.ema = chart.addLineSeries({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
-      if (preset.useBB) {
-        overlays.current.bbu = chart.addLineSeries({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
-        overlays.current.bbm = chart.addLineSeries({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
-        overlays.current.bbl = chart.addLineSeries({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
-      }
-      if (preset.useSTAI || preset.useSTPerf)
-        overlays.current.stai = chart.addLineSeries({ lineWidth: 2, lastValueVisible: true, priceLineVisible: true });
-      if (preset.useVWAP) overlays.current.vwap = chart.addLineSeries({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
+      overlays.current.sma = chart.addLineSeries({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
+      overlays.current.ema = chart.addLineSeries({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
+      overlays.current.bbu = chart.addLineSeries({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
+      overlays.current.bbm = chart.addLineSeries({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
+      overlays.current.bbl = chart.addLineSeries({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
+      overlays.current.stai = chart.addLineSeries({ lineWidth: 2, lastValueVisible: true, priceLineVisible: true });
+      overlays.current.vwap = chart.addLineSeries({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
 
       if (preset.useRSI && rsiRef.current) {
         const rchart = LWC.createChart(rsiRef.current, {
@@ -851,7 +840,7 @@ export default function AdvancedCandleChart({
             chart.applyOptions({ width: w });
             macdChartRef.current?.applyOptions({ width: w });
             rsiChartRef.current?.applyOptions({ width: w });
-            applyVisibleDecimation(lastVisibleRangeRef.current);
+            applyVisibleDecimationRef.current(lastVisibleRangeRef.current);
             zeroWidthObserver?.disconnect();
             zeroWidthObserver = null;
           }
@@ -864,7 +853,7 @@ export default function AdvancedCandleChart({
         chart.applyOptions({ width: w });
         macdChartRef.current?.applyOptions({ width: w });
         rsiChartRef.current?.applyOptions({ width: w });
-        applyVisibleDecimation(lastVisibleRangeRef.current);
+        applyVisibleDecimationRef.current(lastVisibleRangeRef.current);
         logProbeEvent(`resize:${w}`);
       };
       window.addEventListener('resize', onResize);
@@ -874,12 +863,13 @@ export default function AdvancedCandleChart({
         window.removeEventListener('resize', onResize);
         macdChartRef.current?.remove();
         rsiChartRef.current?.remove();
-        chart.remove();
+        chartRef.current?.remove();
         chartRef.current = null;
         macdChartRef.current = null;
         rsiChartRef.current = null;
         candleRef.current = null;
         overlays.current = {};
+        overlaySeriesRef.current = {};
         rsiSeriesRef.current = null;
         macdLineRef.current = null;
         macdSigRef.current = null;
@@ -898,23 +888,7 @@ export default function AdvancedCandleChart({
       logProbeEvent('init-error');
       return () => {};
     }
-  }, [
-    applyVisibleDecimation,
-    chartAreaHeight,
-    height,
-    preset.useBB,
-    preset.useEMA,
-    preset.useMACD,
-    preset.useRSI,
-    preset.useSMA,
-    preset.useSTAI,
-    preset.useSTPerf,
-    preset.useVWAP,
-    preset.stPerfUseAMA,
-    qaProbeEnabled,
-    recordStage,
-    tf,
-  ]);
+  }, []);
 
   useEffect(() => {
     if (!bars.length || !candleRef.current) return;
@@ -998,6 +972,7 @@ export default function AdvancedCandleChart({
     seedBarsRef.current = [];
     lastVisibleRangeRef.current = null;
     candleRef.current?.setData([]);
+    overlays.current.sma?.setData([]);
     overlays.current.stai?.setData([]);
     overlays.current.ema?.setData([]);
     overlays.current.vwap?.setData([]);

@@ -11,6 +11,16 @@ export default function OptionsDock({ triggerRef }: OptionsDockProps) {
   const { open, setOpen } = useOptionsDock();
   const rootRef = useRef<HTMLElement | null>(null);
 
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    if (!open) {
+      el.setAttribute('inert', '');
+    } else {
+      el.removeAttribute('inert');
+    }
+  }, [open]);
+
   // Focus management: focus inside on open, restore to trigger on close
   useEffect(() => {
     const root = rootRef.current;
@@ -38,8 +48,7 @@ export default function OptionsDock({ triggerRef }: OptionsDockProps) {
         role="dialog"
         aria-modal="false"
         aria-labelledby="options-dock-title"
-        aria-hidden={!open}
-        {...({ inert: !open } as any)}
+        aria-hidden={open ? 'false' : 'true'}
         tabIndex={-1}
         ref={rootRef as any}
         onKeyDown={(e) => {

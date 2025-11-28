@@ -84,7 +84,34 @@ introduced:
 - Use `docs/TESTING_GUIDE.md` for detailed UI/indicator verification.
 - For date‑range specific problems, use `docs/DATE_RANGE_TROUBLESHOOTING.md`.
 
-## 7. When to Open an Issue
+## 7. Options Ranking / Schwab Flow
+
+Symptoms:
+- Options page stays empty even for liquid symbols.
+- Console shows `schwab-*` function failures or `options-rank` 404s.
+
+Checklist:
+- Confirm the frontend is actually reaching the Supabase project (`frontend/.env.local` must set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_EDGE_BASE_URL`).
+- Smoke‑test the critical functions directly. From the repo root:
+
+  ```bash
+  KEY=$(grep VITE_SUPABASE_ANON_KEY frontend/.env.local | cut -d= -f2)
+  curl -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+       -H "Content-Type: application/json" \
+       https://iwwdxshzrxilpzehymeu.supabase.co/functions/v1/stock-historical-v3 \
+       -d '{"symbol":"AAPL","range":"1mo"}'
+
+  curl -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+       "https://iwwdxshzrxilpzehymeu.supabase.co/functions/v1/options-rank?symbol=AAPL&top=5"
+  ```
+
+  Both requests should return `200` with JSON payloads. If `options-rank` returns `404 unknown symbol`, the chain has not been hydrated yet.
+- Warming a chain from the Options UI calls `schwab-instruments` and `schwab-option-chains`. These require valid Schwab OAuth tokens stored in `schwab_tokens`. Use the **Connect Schwab** flow (`/schwab/connect`) to provision tokens; otherwise you will see warnings like “Unable to warm option chain – continuing with cached data if available.”
+- The Options page now surfaces those warnings but still attempts to rank using whatever is already cached. If ranking still fails after warming, check Supabase function logs for the exact edge error.
+
+Once the curl checks pass (or after connecting Schwab and re‑running “Rank”), the chart and options table should update for any valid symbol a user enters.
+
+## 8. When to Open an Issue
 
 Open a GitHub issue when:
 - You’ve followed the relevant steps above and the problem persists.

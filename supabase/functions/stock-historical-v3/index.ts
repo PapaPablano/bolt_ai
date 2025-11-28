@@ -354,10 +354,28 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const body = (await req.json()) as { symbol?: string; range?: string; instrumentType?: InstrumentType } | null
-    const symbolInput = body?.symbol
-    const range = body?.range ?? '1mo'
-    const instrumentType = body?.instrumentType === 'future' ? 'future' : DEFAULT_INSTRUMENT_TYPE
+    const url = new URL(req.url)
+    let symbolInput: string | undefined
+    let range: string
+    let instrumentType: InstrumentType
+
+    if (req.method === 'GET') {
+      symbolInput = url.searchParams.get('symbol') ?? undefined
+      range = url.searchParams.get('range') ?? '1mo'
+      const itParam = url.searchParams.get('instrumentType')
+      instrumentType = itParam === 'future' ? 'future' : DEFAULT_INSTRUMENT_TYPE
+    } else {
+      let body: { symbol?: string; range?: string; instrumentType?: InstrumentType } | null = null
+      try {
+        body = (await req.json()) as { symbol?: string; range?: string; instrumentType?: InstrumentType } | null
+      } catch {
+        body = null
+      }
+
+      symbolInput = body?.symbol
+      range = body?.range ?? '1mo'
+      instrumentType = body?.instrumentType === 'future' ? 'future' : DEFAULT_INSTRUMENT_TYPE
+    }
 
     if (!symbolInput) {
       return new Response(

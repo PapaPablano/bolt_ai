@@ -122,8 +122,20 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const body = (await req.json()) as { query?: string } | null
-    const query = body?.query
+    const url = new URL(req.url)
+    let query: string | undefined
+
+    if (req.method === 'GET') {
+      query = url.searchParams.get('q') ?? undefined
+    } else {
+      let body: { query?: string } | null = null
+      try {
+        body = (await req.json()) as { query?: string } | null
+      } catch {
+        body = null
+      }
+      query = body?.query
+    }
 
     if (!query) {
       return new Response(

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import Tooltip from '@/components/ui/Tooltip';
 import { GradeBadge } from '@/components/options/GradeBadge';
+import { fetchStockSearch, type SearchHit } from '@/lib/api';
+import { api } from '@/lib/api/client';
 
 export type RankedRow = {
   rank: number;
@@ -71,9 +73,7 @@ const COL_HINTS: Record<string, string> = {
 };
 
 function useSymbolSearch(query: string) {
-  const [hits, setHits] = useState<
-    { symbol: string; name?: string; exchange?: string }[]
-  >([]);
+  const [hits, setHits] = useState<SearchHit[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -87,19 +87,14 @@ function useSymbolSearch(query: string) {
     const t = window.setTimeout(async () => {
       try {
         setBusy(true);
-        const r = await fetch(
-          `/api/stock-search?q=${encodeURIComponent(q)}&limit=8`,
-          { signal: ac.signal },
-        );
-        const ct = r.headers.get('content-type') || '';
-        const j = ct.includes('json') ? await r.json() : null;
-        setHits(Array.isArray(j?.results) ? j.results : []);
+        const data = await fetchStockSearch(q, { limit: 8, signal: ac.signal });
+        setHits(data);
       } catch {
-        // ignore
+        setHits([]);
       } finally {
         setBusy(false);
       }
-    }, 200);
+    }, 150);
 
     return () => {
       ac.abort();
@@ -158,6 +153,32 @@ async function jsonOrText(res: Response) {
   return { ok: false, error: await res.text() };
 }
 
+async function describeResponseError(res: Response) {
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    try {
+      const body = await res.json();
+      if (body && typeof body.error === 'string') return body.error;
+      return JSON.stringify(body);
+    } catch {
+      /* ignore */
+    }
+  }
+  try {
+    const text = await res.text();
+    if (text) return text;
+  } catch {
+    /* ignore */
+  }
+  return res.statusText || 'unknown error';
+}
+
+async function ensureOk(res: Response, label: string) {
+  if (res.ok) return;
+  const reason = await describeResponseError(res);
+  throw new Error(`${label} failed: ${reason}`);
+}
+
 // optional auth header (some schwab* routes may require it)
 async function authHeaders(): Promise<Record<string, string>> {
   try {
@@ -179,21 +200,28 @@ async function warmOptionData(symbol: string): Promise<string | null> {
   const auth = await authHeaders();
 
   // 1) resolve canonical via stock-search (keeps UX happy even if user typed alias)
-  const r0 = await fetch(`/api/stock-search?q=${encodeURIComponent(sym)}&limit=1`);
+  const r0 = await api(`/api/stock-search?q=${encodeURIComponent(sym)}&limit=1`);
   const j0 = await jsonOrText(r0);
+  if (!j0?.ok) throw new Error(j0?.error || 'Symbol lookup failed');
   const canonical = (j0 as any)?.results?.[0]?.symbol || sym;
 
   // 2) prime instruments (provider catalog)
-  await fetch(`/api/schwab-instruments?symbol=${encodeURIComponent(canonical)}`, {
-    headers: auth,
-  });
+  await ensureOk(
+    await api(`/api/schwab-instruments?symbol=${encodeURIComponent(canonical)}`, {
+      headers: auth,
+    }),
+    'Schwab instruments',
+  );
 
   // 3) prime the *entire* chain (set a wide DTE window)
-  await fetch(
-    `/api/schwab-option-chains?symbol=${encodeURIComponent(
-      canonical,
-    )}&dteMin=0&dteMax=1500&prefetch=1`,
-    { headers: auth },
+  await ensureOk(
+    await api(
+      `/api/schwab-option-chains?symbol=${encodeURIComponent(
+        canonical,
+      )}&dteMin=0&dteMax=1500&prefetch=1`,
+      { headers: auth },
+    ),
+    'Schwab option chains',
   );
 
   return canonical;
@@ -251,6 +279,8 @@ function fmtNY(dt: Date | null) {
   });
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export function OptionsPanel() {
   const [symbol, setSymbol] = useState('AAPL');
   const [symInput, setSymInput] = useState('AAPL');
@@ -305,9 +335,42 @@ export function OptionsPanel() {
         debug: '1',
         staleMaxMin: marketOpen ? '60' : String(3 * 24 * 60),
       }).toString();
-      const res = await fetch(`/api/options-rank?${qs}`);
+      const res = await api(`/api/options-rank?${qs}`);
       return await jsonOrText(res);
     }
+
+    const warmOnce = async (force = false) => {
+      if (!upper) return;
+      if (!force && lastWarmedRef.current === upper) return;
+
+      let warning: string | null = null;
+      const warmLabel = marketOpen
+        ? 'Warming option chain…'
+        : 'Market closed – warming latest chain…';
+      setStatus(warmLabel);
+      try {
+        const canon = await warmOptionData(upper);
+        lastWarmedRef.current = canon ?? upper;
+        await sleep(marketOpen ? 250 : 500);
+      } catch (warmErr) {
+        console.warn('[options] warmOptionData failed', warmErr);
+        const msg =
+          warmErr instanceof Error ? warmErr.message : String(warmErr);
+        warning = msg || 'Unable to warm option chain';
+        setStatus(
+          `${warning} – continuing with cached data if available.`,
+        );
+        lastWarmedRef.current = upper;
+      } finally {
+        if (!warning) {
+          setStatus(null);
+        } else if (typeof window !== 'undefined') {
+          window.setTimeout(() => setStatus(null), 6000);
+        } else {
+          setStatus(null);
+        }
+      }
+    };
 
     try {
       setLoading(true);
@@ -315,35 +378,15 @@ export function OptionsPanel() {
       setDebug(null);
 
       // warm once per symbol (covers "type + click Rank" path)
-      if (upper && lastWarmedRef.current !== upper) {
-        setStatus(
-          marketOpen
-            ? 'Warming option chain…'
-            : 'Market closed – warming latest chain…',
-        );
-        const canon = await warmOptionData(upper);
-        lastWarmedRef.current = canon ?? upper;
-        // tiny pause gives the cache a chance to populate
-        await new Promise((r) =>
-          setTimeout(r, marketOpen ? 250 : 500),
-        );
-        setStatus(null);
-      }
+      await warmOnce();
 
       let payload: any = await fetchRank();
 
       // safety net: warm + retry if backend still complains
       const unknownRe = /(unknown|not\s*found|no\s*chain)/i;
       if (!payload.ok && unknownRe.test(payload.error || '')) {
-        setStatus(
-          marketOpen
-            ? 'Warming option chain…'
-            : 'Market closed – warming latest chain…',
-        );
-        const canon = await warmOptionData(upper);
-        lastWarmedRef.current = canon ?? upper;
-        setStatus(null);
-        await new Promise((r) => setTimeout(r, 800));
+        await warmOnce(true);
+        await sleep(800);
         payload = await fetchRank();
       }
 
@@ -424,72 +467,82 @@ export function OptionsPanel() {
         <label className="text-sm flex flex-col gap-1 w-full sm:w-auto">
           <span>Symbol</span>
           <div className="relative">
-            <input
-              role="combobox"
-              aria-expanded={comboOpen}
-              aria-controls="symbol-listbox"
-              aria-activedescendant={highlight >= 0 ? `symopt-${highlight}` : undefined}
-              aria-autocomplete="list"
-              placeholder="AAPL, CRWD, TSLA\x19"
-              className="w-[220px] rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm"
-              value={symInput}
-              onChange={(e) => {
-                setSymInput(e.target.value);
-                setComboOpen(true);
-              }}
-              onFocus={() => setComboOpen(true)}
-              onBlur={() => {
-                window.setTimeout(() => setComboOpen(false), 120);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'ArrowDown' && symHits.length > 0) {
-                  e.preventDefault();
+            {(() => {
+              const comboProps = {
+                role: 'combobox' as const,
+                'aria-controls': 'symbol-listbox',
+                'aria-activedescendant':
+                  highlight >= 0 ? `symopt-${highlight}` : undefined,
+                'aria-autocomplete': 'list' as const,
+                placeholder: 'AAPL, CRWD, TSLA\x19',
+                className:
+                  'w-[220px] rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm',
+                value: symInput,
+                onChange: (e: any) => {
+                  setSymInput(e.target.value);
                   setComboOpen(true);
-                  setHighlight((i) => {
-                    const next = i + 1;
-                    return next >= symHits.length ? symHits.length - 1 : next;
-                  });
-                  return;
-                }
-                if (e.key === 'ArrowUp' && symHits.length > 0) {
-                  e.preventDefault();
-                  setComboOpen(true);
-                  setHighlight((i) => {
-                    const next = i - 1;
-                    return next < 0 ? 0 : next;
-                  });
-                  return;
-                }
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  if (highlight >= 0 && highlight < symHits.length) {
-                    const h = symHits[highlight];
-                    setSymInput(h.symbol);
-                    setComboOpen(false);
-                    (async () => {
-                      setStatus(
-                        marketOpen
-                          ? 'Warming option chain…'
-                          : 'Market closed – warming latest chain…',
-                      );
-                      const canon = await warmOptionData(h.symbol);
-                      lastWarmedRef.current = canon ?? h.symbol;
-                      if (!marketOpen) {
-                        await new Promise((r) => setTimeout(r, 500));
-                      }
-                      setStatus(null);
-                      handleRank();
-                    })();
-                  } else {
-                    handleRank();
+                },
+                onFocus: () => setComboOpen(true),
+                onBlur: () => {
+                  window.setTimeout(() => setComboOpen(false), 120);
+                },
+                onKeyDown: (e: any) => {
+                  if (e.key === 'ArrowDown' && symHits.length > 0) {
+                    e.preventDefault();
+                    setComboOpen(true);
+                    setHighlight((i) => {
+                      const next = i + 1;
+                      return next >= symHits.length ? symHits.length - 1 : next;
+                    });
+                    return;
                   }
-                }
-              }}
-            />
+                  if (e.key === 'ArrowUp' && symHits.length > 0) {
+                    e.preventDefault();
+                    setComboOpen(true);
+                    setHighlight((i) => {
+                      const next = i - 1;
+                      return next < 0 ? 0 : next;
+                    });
+                    return;
+                  }
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (highlight >= 0 && highlight < symHits.length) {
+                      const h = symHits[highlight];
+                      setSymInput(h.symbol);
+                      setComboOpen(false);
+                      (async () => {
+                        setStatus(
+                          marketOpen
+                            ? 'Warming option chain…'
+                            : 'Market closed – warming latest chain…',
+                        );
+                        const canon = await warmOptionData(h.symbol);
+                        lastWarmedRef.current = canon ?? h.symbol;
+                        if (!marketOpen) {
+                          await new Promise((r) => setTimeout(r, 500));
+                        }
+                        setStatus(null);
+                        handleRank();
+                      })();
+                    } else {
+                      handleRank();
+                    }
+                  }
+                },
+              };
+
+              return comboOpen ? (
+                <input {...comboProps} />
+              ) : (
+                <input {...comboProps} />
+              );
+            })()}
             {comboOpen && symHits.length > 0 && (
               <ul
                 id="symbol-listbox"
                 role="listbox"
+                aria-label="Symbol suggestions"
                 className="absolute z-[9999] mt-1 max-h-64 w-[360px] overflow-auto rounded border border-slate-700 bg-slate-900 shadow-2xl"
               >
                 {symHits.map((h, i) => (
@@ -497,7 +550,7 @@ export function OptionsPanel() {
                     id={`symopt-${i}`}
                     key={h.symbol}
                     role="option"
-                    aria-selected={i === highlight ? true : undefined}
+                    {...(i === highlight ? { 'aria-selected': 'true' } : {})}
                     className={`flex cursor-pointer items-center gap-2 px-2 py-1 text-sm ${
                       i === highlight ? 'bg-slate-800' : 'hover:bg-slate-800'
                     }`}
@@ -530,9 +583,11 @@ export function OptionsPanel() {
             )}
           </div>
         </label>
-        <label className="text-sm flex flex-col gap-1 w-full sm:w-auto">
+        <label className="text-sm flex flex-col gap-1 w-full sm:w-auto" htmlFor="side">
           <span>Side</span>
           <select
+            id="side"
+            aria-label="Side"
             className="w-full rounded bg-slate-900 px-2 py-1 border border-slate-700"
             value={side}
             onChange={(e) => {
@@ -874,6 +929,14 @@ function FactorsCard({ row }: { row: RankedRow }) {
   );
 }
 
+type Watchlist = {
+  id: string;
+  name: string;
+  description?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
 function SaveWatchlistForm({
   selected,
   onSaved,
@@ -881,76 +944,206 @@ function SaveWatchlistForm({
   selected: number[];
   onSaved?: () => void;
 }) {
-  const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const canSave = name.trim().length > 0 && selected.length > 0;
+
+  const [mode, setMode] = useState<'existing' | 'new'>('existing');
+  const [lists, setLists] = useState<Watchlist[]>([]);
+  const [loadingLists, setLoadingLists] = useState(false);
+  const [listId, setListId] = useState<string | null>(null);
+  const [name, setName] = useState('');
+
+  const getToken = async (): Promise<string | null> => {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? null;
+  };
+
+  const fetchLists = async () => {
+    try {
+      setLoadingLists(true);
+      setErr(null);
+      const token = await getToken();
+      if (!token) {
+        // Not signed in – skip loading lists in anon mode.
+        setLists([]);
+        return;
+      }
+      const res = await api('/api/options-watchlist', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 401) {
+        // Soft-fail for unauthorized access.
+        setLists([]);
+        return;
+      }
+      const ct = res.headers.get('content-type') || '';
+      const payload = ct.includes('application/json') ? await res.json() : null;
+      if (!payload?.ok) throw new Error(payload?.error || 'Failed to load watchlists');
+      const arr: Watchlist[] = payload.lists ?? [];
+      setLists(arr);
+      if (!listId && arr.length) setListId(arr[0].id);
+    } catch (e: any) {
+      setErr(e?.message ?? String(e));
+    } finally {
+      setLoadingLists(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLists();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const appendItems = async (targetId: string, token: string) => {
+    const r2 = await api(`/api/options-watchlist/${targetId}/items`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ contract_ids: selected }),
+    });
+    const j2 = await r2.json();
+    if (!j2.ok) throw new Error(j2.error || 'Failed to add items');
+  };
 
   const save = async () => {
     try {
       setBusy(true);
       setErr(null);
-      // Grab the current user's JWT
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token ?? '';
-      if (!token) throw new Error('Not signed in – cannot save watchlist');
 
-      // 1) create the list
-      const r1 = await fetch('/api/options-watchlist', {
+      if (!selected.length) throw new Error('Select at least one contract.');
+
+      const token = await getToken();
+      if (!token) {
+        // Not signed in – skip saving in anon mode.
+        return;
+      }
+
+      if (mode === 'existing') {
+        if (!listId) throw new Error('Pick a watchlist.');
+        await appendItems(listId, token);
+        onSaved?.();
+        return;
+      }
+
+      const nm = name.trim();
+      if (!nm) throw new Error('Enter a name.');
+
+      const r1 = await api('/api/options-watchlist', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name: nm }),
       });
+      if (r1.status === 401) {
+        setErr('Sign in to create option watchlists.');
+        return;
+      }
       const j1 = await r1.json();
       if (!j1.ok) throw new Error(j1.error || 'Failed to create list');
 
-      const listId = j1.list.id;
+      const createdId: string = j1.list.id;
+      await appendItems(createdId, token);
 
-      // 2) add items
-      const r2 = await fetch(`/api/options-watchlist/${listId}/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ contract_ids: selected }),
-      });
-      const j2 = await r2.json();
-      if (!j2.ok) throw new Error(j2.error || 'Failed to add items');
+      await fetchLists();
+      setMode('existing');
+      setListId(createdId);
+      setName('');
 
       onSaved?.();
-      setName('');
     } catch (e: any) {
-      setErr(String(e.message || e));
+      setErr(e?.message ?? String(e));
     } finally {
       setBusy(false);
     }
   };
+
+  const disableSave =
+    busy ||
+    selected.length === 0 ||
+    (mode === 'new' && !name.trim());
 
   return (
     <div className="flex flex-col gap-2">
       <div className="text-xs text-slate-500">
         Save selected contracts to a watchlist
       </div>
-      <div className="flex gap-2">
-        <input
-          className="border rounded px-2 py-1 text-sm flex-1"
-          placeholder="Watchlist name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+
+      <div className="flex items-center gap-3">
+        <label className="inline-flex items-center gap-1 text-xs">
+          <input
+            type="radio"
+            name="wl-mode"
+            value="existing"
+            checked={mode === 'existing'}
+            onChange={() => setMode('existing')}
+          />
+          Existing
+        </label>
+        <label className="inline-flex items-center gap-1 text-xs">
+          <input
+            type="radio"
+            name="wl-mode"
+            value="new"
+            checked={mode === 'new'}
+            onChange={() => setMode('new')}
+          />
+          New list
+        </label>
         <button
+          type="button"
+          onClick={fetchLists}
+          className="ml-auto text-[11px] underline decoration-dotted disabled:opacity-50"
+          disabled={loadingLists}
+        >
+          {loadingLists ? 'Refreshing…' : 'Refresh lists'}
+        </button>
+      </div>
+
+      {mode === 'existing' ? (
+        <div className="flex items-center gap-2">
+          <select
+            aria-label="Existing option watchlist"
+            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm"
+            value={listId ?? ''}
+            onChange={(e) => setListId(e.target.value || null)}
+            disabled={loadingLists || !lists.length}
+          >
+            {!lists.length && <option value="">No watchlists yet</option>}
+            {lists.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="New watchlist name"
+            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+      )}
+
+      {err && <div className="text-xs text-red-500">{err}</div>}
+
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <button
+          type="button"
           className="px-3 py-1 rounded bg-black text-white disabled:opacity-50 text-sm"
-          disabled={!canSave || busy}
+          disabled={disableSave}
           onClick={save}
         >
           {busy ? 'Saving...' : 'Save'}
         </button>
       </div>
-      {err && <div className="text-xs text-red-500">{err}</div>}
     </div>
   );
 }

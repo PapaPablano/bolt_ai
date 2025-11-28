@@ -31,10 +31,18 @@ export function preprocessOhlcv(raw: Bar[], opts: PreprocessOptions): Preprocess
   let gapsFilled = 0;
   const cleaned: Bar[] = [];
 
-  // sort + dedupe by aligned sec
-  const sorted = [...raw].sort((a, b) => toSec(a.time) - toSec(b.time));
-  for (const b of sorted) {
-    const t = alignNYSEBucketStartUtcSec(toSec(b.time), opts.timeframe);
+  // pre-compute seconds, drop any bars with invalid times, then sort + dedupe by aligned sec
+  const withSec = raw
+    .map((b) => ({ bar: b, sec: toSec(b.time) }))
+    .filter((x) => Number.isFinite(x.sec));
+
+  if (withSec.length !== raw.length) {
+    dropped += raw.length - withSec.length;
+  }
+
+  const sorted = withSec.sort((a, b) => a.sec - b.sec);
+  for (const { bar: b, sec } of sorted) {
+    const t = alignNYSEBucketStartUtcSec(sec, opts.timeframe);
     if (seen.has(t)) {
       dropped++;
       continue;

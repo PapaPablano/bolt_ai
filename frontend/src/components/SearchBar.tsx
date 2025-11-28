@@ -1,12 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-
-interface SearchResult {
-  symbol: string;
-  name: string;
-  exchange: string;
-}
+import { fetchStockSearch, type SearchHit } from '@/lib/api';
 
 interface SearchBarProps {
   onSelectSymbol: (symbol: string) => void;
@@ -14,35 +8,39 @@ interface SearchBarProps {
 
 export function SearchBar({ onSelectSymbol }: SearchBarProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [results, setResults] = useState<SearchHit[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
-  const handleSearch = async (searchQuery: string) => {
-    setQuery(searchQuery);
-
-    if (searchQuery.length < 1) {
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
       setResults([]);
+      setErr(null);
       setShowResults(false);
       return;
     }
 
-    setIsSearching(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('stock-search', {
-        body: { query: searchQuery }
-      });
+    setLoading(true);
+    setErr(null);
 
-      if (error) throw error;
-      setResults(data.results || []);
-      setShowResults(true);
-    } catch (error) {
-      console.error('Search error:', error);
-      setResults([]);
-    } finally {
-      setIsSearching(false);
-    }
-  };
+    const t = setTimeout(async () => {
+      try {
+        const hits = await fetchStockSearch(q, { limit: 8 });
+        setResults(hits);
+        setShowResults(true);
+      } catch (e: any) {
+        setErr(e?.message ?? String(e));
+        setResults([]);
+        setShowResults(false);
+      } finally {
+        setLoading(false);
+      }
+    }, 200);
+
+    return () => clearTimeout(t);
+  }, [query]);
 
   const handleSelect = (symbol: string) => {
     onSelectSymbol(symbol);
@@ -62,20 +60,25 @@ export function SearchBar({ onSelectSymbol }: SearchBarProps) {
           id="stock-search"
           type="search"
           value={query}
-          onChange={(e) => handleSearch(e.target.value)}
+          onChange={(e) => setQuery(e.target.value)}
           placeholder="Search stocks..."
           className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           aria-controls="search-results"
           aria-autocomplete="list"
         />
-        {isSearching && (
+        {err && (
+          <div className="mt-1 text-xs text-red-400" aria-live="polite">
+            {err}
+          </div>
+        )}
+        {loading && (
           <div className="absolute right-3 top-1/2 -translate-y-1/2" aria-live="polite" aria-label="Searching">
             <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
       </div>
 
-      {showResults && results.length > 0 && (
+      {showResults && query.trim() && (
         <div
           id="search-results"
           role="listbox"
@@ -87,18 +90,21 @@ export function SearchBar({ onSelectSymbol }: SearchBarProps) {
               key={result.symbol}
               onClick={() => handleSelect(result.symbol)}
               role="option"
-              aria-selected={undefined}
+              {...{ 'aria-selected': undefined }}
               className="w-full px-4 py-3 text-left hover:bg-slate-700 transition-colors border-b border-slate-700 last:border-b-0"
             >
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-semibold text-slate-100">{result.symbol}</div>
-                  <div className="text-xs text-slate-400">{result.name}</div>
+                  {result.name && <div className="text-xs text-slate-400">{result.name}</div>}
                 </div>
-                <div className="text-xs text-slate-500">{result.exchange}</div>
+                {result.exchange && <div className="text-xs text-slate-500">{result.exchange}</div>}
               </div>
             </button>
           ))}
+          {!loading && results.length === 0 && (
+            <div className="px-4 py-3 text-sm text-slate-400">No results</div>
+          )}
         </div>
       )}
     </div>

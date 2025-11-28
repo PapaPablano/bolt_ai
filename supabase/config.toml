@@ -1,6 +1,27 @@
 project_id = "iwwdxshzrxilpzehymeu"
 
+[functions.stock-search]
+verify_jwt = false
+
+[functions.stock-quote]
+verify_jwt = false
+
+[functions.stock-historical]
+verify_jwt = false
+
+[functions.stock-historical-v3]
+verify_jwt = false
+
+[functions.stock-intraday]
+verify_jwt = false
+
 [functions.options-rank]
+verify_jwt = false
+
+[functions.schwab-instruments]
+verify_jwt = false
+
+[functions.schwab-option-chains]
 verify_jwt = false
 
 [functions.options-watchlist]
