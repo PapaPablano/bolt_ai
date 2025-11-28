@@ -969,12 +969,28 @@ export default function AdvancedCandleChart({
       const series = sma(normalized, preset.smaPeriod);
       overlays.current.sma.setData(mapPointsForChart(series));
     }
+
     const lastIdx = normalized.length - 1;
-    const from = Math.max(0, lastIdx - focusWindowCount(tf));
-    chartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
-    macdChartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
-    rsiChartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
-  }, [applyVisibleDecimation, bars, indicatorWorker, preset, pushWindowToWorker, qaProbeEnabled, recordStage, tf]);
+    if (lastIdx >= 0) {
+      const windowSize = focusWindowCount(tf);
+      const from = Math.max(0, Math.min(lastIdx, lastIdx - windowSize));
+      if (from <= lastIdx) {
+        chartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
+        macdChartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
+        rsiChartRef.current?.timeScale().setVisibleLogicalRange({ from, to: lastIdx });
+      }
+    }
+  }, [
+    applyVisibleDecimation,
+    bars,
+    indicatorWorker,
+    pushWindowToWorker,
+    qaProbeEnabled,
+    recordStage,
+    tf,
+    preset.useSMA,
+    preset.smaPeriod,
+  ]);
 
   useEffect(() => {
     lastTimeSecRef.current = null;
