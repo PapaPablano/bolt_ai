@@ -1,5 +1,5 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Routes, Route, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { BarChart3 } from 'lucide-react';
 import { SkipLinks } from './components/SkipLinks';
 import { FocusIndicator } from './components/FocusIndicator';
@@ -8,33 +8,9 @@ import { PWAUpdateNotification } from './components/PWAUpdateNotification';
 import { SearchBar } from './components/SearchBar';
 import { BreadcrumbsWithSchema } from './components/Breadcrumbs';
 import { SiteFooter } from './components/SiteFooter';
-import { NavLink, InternalLink } from './components/InternalLink';
+import { NavLink } from './components/InternalLink';
 import { OptionsDockProvider, useOptionsDock } from '@/contexts/OptionsDockContext';
 import OptionsDock from '@/components/options/OptionsDock';
-const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
-const WatchlistPage = lazy(() => import('./pages/WatchlistPage').then(m => ({ default: m.WatchlistPage })));
-const MarketsPage = lazy(() => import('./pages/MarketsPage').then(m => ({ default: m.MarketsPage })));
-const MarketIndicesPage = lazy(() => import('./pages/MarketIndicesPage').then(m => ({ default: m.MarketIndicesPage })));
-const MarketSectorsPage = lazy(() => import('./pages/MarketSectorsPage').then(m => ({ default: m.MarketSectorsPage })));
-const ComparePage = lazy(() => import('./pages/ComparePage').then(m => ({ default: m.ComparePage })));
-const ScreenerPage = lazy(() => import('./pages/ScreenerPage').then(m => ({ default: m.ScreenerPage })));
-const AlertsPage = lazy(() => import('./pages/AlertsPage').then(m => ({ default: m.AlertsPage })));
-const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })));
-const LiveChartDemoPage = lazy(() => import('./pages/LiveChartDemoPage').then(m => ({ default: m.LiveChartDemoPage })));
-const ChartWorkspacePage = lazy(() => import('./pages/ChartWorkspace'));
-const OptionsPage = lazy(() => import('./pages/OptionsPage'));
-const HelpPage = lazy(() => import('./pages/HelpPage').then(m => ({ default: m.HelpPage })));
-const HelpGettingStartedPage = lazy(() => import('./pages/help/GettingStartedPage').then(m => ({ default: m.HelpGettingStartedPage })));
-const HelpIndicatorsPage = lazy(() => import('./pages/help/IndicatorsGuidePage').then(m => ({ default: m.HelpIndicatorsPage })));
-const HelpFocusManagementPage = lazy(() => import('./pages/help/FocusManagementGuidePage').then(m => ({ default: m.HelpFocusManagementPage })));
-const HelpInternalLinkingPage = lazy(() => import('./pages/help/InternalLinkingGuidePage').then(m => ({ default: m.HelpInternalLinkingPage })));
-const AboutPage = lazy(() => import('./pages/AboutPage').then(m => ({ default: m.AboutPage })));
-const PrivacyPage = lazy(() => import('./pages/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
-const TermsPage = lazy(() => import('./pages/TermsPage').then(m => ({ default: m.TermsPage })));
-const SitemapPage = lazy(() => import('./pages/SitemapPage').then(m => ({ default: m.SitemapPage })));
-const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage').then(m => ({ default: m.PlaceholderPage })));
-const SchwabConnectPage = lazy(() => import('./pages/SchwabConnectPage').then(m => ({ default: m.SchwabConnectPage })));
-const SchwabCallbackPage = lazy(() => import('./pages/SchwabCallbackPage').then(m => ({ default: m.SchwabCallbackPage })));
 import { ROUTES } from './lib/urlHelpers';
 import { generateStructuredData } from './lib/seo';
 
@@ -49,6 +25,11 @@ const readInitialSymbol = () => {
   } catch {
     return DEFAULT_SYMBOL;
   }
+};
+
+export type AppOutletContext = {
+  selectedSymbol: string;
+  handleSymbolChange: (symbol: string, options?: { navigate?: boolean }) => void;
 };
 
 function App() {
@@ -86,7 +67,7 @@ function App() {
       { label: 'Watchlist', to: ROUTES.watchlist(), isActive: location.pathname.startsWith('/watchlist'), kind: 'link' as const },
       { label: 'Markets', to: ROUTES.markets(), isActive: location.pathname.startsWith('/markets'), kind: 'link' as const },
       { label: 'Compare', to: ROUTES.compare(), isActive: location.pathname.startsWith('/compare'), kind: 'link' as const },
-      { label: 'Options', to: '/options', isActive: optionsDock.open, kind: 'options' as const },
+      { label: 'Options', to: '/options', isActive: dockOpen, kind: 'options' as const },
       { label: 'Help', to: ROUTES.help(), isActive: location.pathname.startsWith('/help'), kind: 'link' as const },
     ],
     [location.pathname, dockOpen]
@@ -119,7 +100,7 @@ function App() {
             <nav aria-label="Primary" className="flex flex-wrap gap-4">
               {navItems.map((item) => {
                 if (item.kind === 'options') {
-                  const isOpen = optionsDock.open;
+                  const isOpen = dockOpen;
                   const commonProps = {
                     id: 'options-toggle',
                     ref: optionsBtnRef,
@@ -166,81 +147,7 @@ function App() {
       <main id="main-content" className="container mx-auto px-4 py-8 flex-1 w-full" role="main">
         <BreadcrumbsWithSchema />
         <Suspense fallback={<div className="text-slate-400">Loading page...</div>}>
-          <Routes>
-          <Route
-            path="/"
-            element={
-              <DashboardPage
-                selectedSymbol={selectedSymbol}
-                onSymbolChange={handleSymbolChange}
-              />
-            }
-          />
-          <Route
-            path="/stocks/:symbol"
-            element={
-              <RoutedDashboardPage
-                selectedSymbol={selectedSymbol}
-                onSymbolChange={handleSymbolChange}
-              />
-            }
-          />
-          <Route
-            path={ROUTES.watchlist()}
-            element={<WatchlistPage onSymbolSelect={handleSymbolChange} />}
-          />
-          <Route path={ROUTES.markets()} element={<MarketsPage />} />
-          <Route path={ROUTES.marketIndices()} element={<MarketIndicesPage />} />
-          <Route path={ROUTES.marketSectors()} element={<MarketSectorsPage />} />
-          <Route path={ROUTES.compare()} element={<ComparePage />} />
-          <Route path={ROUTES.screener()} element={<ScreenerPage />} />
-          <Route path={ROUTES.alerts()} element={<AlertsPage />} />
-          <Route path={ROUTES.portfolio()} element={<PortfolioPage />} />
-          <Route path={ROUTES.liveChartDemo()} element={<LiveChartDemoPage />} />
-          <Route path="/options" element={<OptionsPage />} />
-          <Route path="/workspace" element={<ChartWorkspacePage />} />
-          <Route path={ROUTES.help()} element={<HelpPage />} />
-          <Route path={ROUTES.helpGettingStarted()} element={<HelpGettingStartedPage />} />
-          <Route path={ROUTES.helpIndicators()} element={<HelpIndicatorsPage />} />
-          <Route path={ROUTES.helpFocusManagement()} element={<HelpFocusManagementPage />} />
-          <Route path={ROUTES.helpLinkingStrategy()} element={<HelpInternalLinkingPage />} />
-          <Route path={ROUTES.schwabConnect()} element={<SchwabConnectPage />} />
-          <Route path={ROUTES.schwabCallback()} element={<SchwabCallbackPage />} />
-          <Route path={ROUTES.about()} element={<AboutPage />} />
-          <Route path={ROUTES.privacy()} element={<PrivacyPage />} />
-          <Route path={ROUTES.terms()} element={<TermsPage />} />
-          <Route path={ROUTES.sitemap()} element={<SitemapPage />} />
-          <Route
-            path="*"
-            element={
-              <PlaceholderPage
-                title="Page not found"
-                description="The page you are looking for is not available. Use the navigation or return to the dashboard to continue exploring live market data."
-                metadata={{
-                  title: 'Page Not Found | Stock Whisperer',
-                  description: 'The page you requested could not be found.',
-                  canonical: location.pathname,
-                  noindex: true,
-                }}
-              >
-                <div className="grid gap-3 md:grid-cols-2" aria-label="Suggested destinations">
-                  <InternalLink to={ROUTES.sitemap()} className="text-blue-400 hover:text-blue-300">
-                    Browse the sitemap →
-                  </InternalLink>
-                  <InternalLink to={ROUTES.help()} className="text-blue-400 hover:text-blue-300">
-                    Visit the help center →
-                  </InternalLink>
-                  <InternalLink to={ROUTES.helpGettingStarted()} className="text-blue-400 hover:text-blue-300">
-                    Read the getting started guide →
-                  </InternalLink>
-                  <InternalLink to={ROUTES.markets()} className="text-blue-400 hover:text-blue-300">
-                    Check today&apos;s market overview →
-                  </InternalLink>
-                </div>
-              </PlaceholderPage>
-            }
-          />
-        </Routes>
+          <Outlet context={{ selectedSymbol, handleSymbolChange }} />
         </Suspense>
       </main>
 
@@ -268,28 +175,6 @@ function RouteCloseOptionsDock() {
   }, [location.pathname, setOpen]);
 
   return null;
-}
-
-interface RoutedDashboardPageProps {
-  selectedSymbol: string;
-  onSymbolChange: (symbol: string, options?: { navigate?: boolean }) => void;
-}
-
-function RoutedDashboardPage({ selectedSymbol, onSymbolChange }: RoutedDashboardPageProps) {
-  const { symbol } = useParams<{ symbol: string }>();
-
-  useEffect(() => {
-    if (symbol && symbol.toUpperCase() !== selectedSymbol) {
-      onSymbolChange(symbol, { navigate: false });
-    }
-  }, [symbol, onSymbolChange, selectedSymbol]);
-
-  return (
-    <DashboardPage
-      selectedSymbol={selectedSymbol}
-      onSymbolChange={onSymbolChange}
-    />
-  );
 }
 
 function GlobalStructuredData() {

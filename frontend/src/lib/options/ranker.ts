@@ -58,8 +58,8 @@ function zscores(values: (number | undefined)[]): number[] {
 function normalize01(values: (number | undefined)[]): number[] {
   const xs = values.filter((v): v is number => v !== undefined && Number.isFinite(v));
   if (xs.length === 0) return values.map(() => 0.5);
-  let min = Math.min(...xs);
-  let max = Math.max(...xs);
+  const min = Math.min(...xs);
+  const max = Math.max(...xs);
   if (min === max) return values.map(() => 0.5);
   return values.map(v => {
     if (v === undefined || !Number.isFinite(v)) return 0.5;

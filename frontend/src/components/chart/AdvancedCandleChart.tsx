@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as LWC from 'lightweight-charts';
-import type { BusinessDay, CandlestickData, HistogramData, ISeriesApi, Time, UTCTimestamp } from 'lightweight-charts';
+import type { CandlestickData, HistogramData, ISeriesApi, Time, UTCTimestamp } from 'lightweight-charts';
 import { DEFAULT_CALENDAR_PREFS, type TF, type Range, type TfPreset } from '@/types/prefs';
 import type { Bar as ApiBar } from '@/types/bars';
+import type { Interval } from '@/store/tickerDataStore';
 import { useChartPrefs } from '@/hooks/useChartPrefs';
 import { env } from '@/env';
 import type { IndicatorStylePrefs } from '@/types/indicator-styles';
 import { cloneIndicatorStylePrefs } from '@/types/indicator-styles';
-import { useHistoricalBars } from '@/hooks/useHistoricalBars';
 import { useLiveBars } from '@/hooks/useLiveBars';
+import { useHookPrice } from '@/hooks/useHookPrice';
+import { useHookQuote } from '@/hooks/useHookQuote';
 import { useProbeToggle } from '@/hooks/useProbeToggle';
 import { useIndicatorWorker, type LinePt as WorkerLinePt } from '@/hooks/useIndicatorWorker';
 import { sma } from '@/utils/indicators';
@@ -31,9 +33,11 @@ import { Button } from '@/components/ui/button';
 import { IndicatorTray, DEFAULT_INDICATORS, type IndicatorModel } from '@/components/indicators/IndicatorTray';
 import PaneKDJ from './PaneKDJ';
 import { genMockBars } from '@/utils/mock';
+import { fromChartTimeValue } from '../../utils/timeUtils';
 import { mergePanePatch, shouldIgnoreLiveBar } from './mergePaneUtils';
 
-export type OverlaySeries = { id: string; points: { ts: string; y: number }[] };
+type OverlayPoint = { ts: string | number; y: number };
+export type OverlaySeries = { id: string; points: OverlayPoint[] };
 
 type Props = {
   symbol: string;
@@ -46,6 +50,36 @@ type Props = {
 type ProbeState = { ok: boolean; error?: string; lastEvent?: string };
 type ChartTimeRange = { from: Time | null; to: Time | null };
 type BootStage = 'none' | 'container-mounted' | 'chart-created' | 'candle-series-created' | 'seed-bars-ready';
+type ProbeRoot = Record<string, unknown>;
+type ProbeMeta = {
+  chartReady?: boolean;
+  seriesReady?: boolean;
+  calendarEnabled?: boolean;
+  calendarReady?: boolean;
+};
+type ProbeBoot = {
+  mounted?: { symbol: string; ts: number }[];
+  unmounted?: { symbol: string; ts: number }[];
+  stages?: { stage: BootStage; ts: number }[];
+};
+type ProbeGlobal = typeof window & {
+  __probe?: Record<string, ProbeRoot>;
+  __probeBoot?: ProbeBoot;
+  __probeMeta?: Record<string, ProbeMeta>;
+  __QA_PROBE__?: string;
+};
+
+const ensureProbeMeta = (symbol: string): ProbeMeta | null => {
+  if (typeof window === 'undefined') return null;
+  const w = window as ProbeGlobal;
+  const metaRoot = (w.__probeMeta ??= {});
+  return (metaRoot[symbol] ??= {});
+};
+
+const toOverlayTime = (ts: OverlayPoint['ts']): Time => {
+  if (typeof ts === 'number') return ts as UTCTimestamp;
+  return ts.includes('T') ? (ts as Time) : (Number(ts) as UTCTimestamp);
+};
 
 const envVars = import.meta.env as Record<string, string | undefined>;
 const tvFlag = (envVars.VITE_CHART_VENDOR ?? envVars.VITE_USE_TRADINGVIEW ?? '').toLowerCase();
@@ -54,7 +88,6 @@ const USING_TV = tvFlag === 'tradingview' || tvFlag === 'true';
 const SESSION_MS = CLOSE_OFFSET_MS - OPEN_OFFSET_MS;
 const CALENDAR_DEBOUNCE_MS = 200;
 // MACD spacing is idempotent: targets stay stable regardless of zoom history.
-const MACD_SPACING_TARGETS: Record<'thin' | 'normal' | 'wide', number> = { thin: 5, normal: 7, wide: 9 };
 const WORKER_VISIBLE_POINT_CAP = 5000;
 const MINUTES_PER_TRADING_DAY = 390;
 const rangeToMinutes = (value: Range | string): number => {
@@ -82,6 +115,60 @@ const rangeToMinutes = (value: Range | string): number => {
       return 900;
   }
 };
+const CONFIDENCE_MIN_ALPHA = 0.3;
+const CONFIDENCE_MAX_ALPHA = 0.95;
+const CONFIDENCE_UP_RGB = '16, 185, 129';
+const CONFIDENCE_DOWN_RGB = '248, 113, 113';
+
+type BarStyle = { color: string; wickColor: string; borderColor: string };
+const tfToInterval = (tf: TF, range: Range): Interval => {
+  // For larger ranges, use finer-grained intervals to improve granularity.
+  if (range === '1Y' || range === '6M') {
+    if (tf === '1Hour') return '15m';
+    if (tf === '1Day') return '1h';
+  }
+
+  switch (tf) {
+    case '1Min':
+      return '1m';
+    case '5Min':
+    case '10Min':
+      return '5m';
+    case '15Min':
+      return '15m';
+    case '1Hour':
+    case '4Hour':
+      return '1h';
+    case '1Day':
+      return '1d';
+    default:
+      return '1d';
+  }
+};
+const groupCandles = (candles: ApiBar[], intervalMs: number): ApiBar[][] => {
+  if (!candles.length) return [];
+
+  const grouped: ApiBar[][] = [];
+  const sorted = candles
+    .slice()
+    .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+  let bucket: ApiBar[] = [];
+  let bucketStart = new Date(sorted[0].time).getTime();
+
+  for (const c of sorted) {
+    const t = new Date(c.time).getTime();
+    if (t < bucketStart + intervalMs) {
+      bucket.push(c);
+    } else {
+      if (bucket.length) grouped.push(bucket);
+      bucket = [c];
+      bucketStart = t;
+    }
+  }
+  if (bucket.length) grouped.push(bucket);
+  return grouped;
+};
 export default function AdvancedCandleChart({
   symbol,
   initialTf = '1Hour',
@@ -90,7 +177,7 @@ export default function AdvancedCandleChart({
   timeframe,
   overlays: overlayProp,
 }: Props) {
-  type QaProbeWindow = typeof window & { __QA_PROBE__?: string };
+  type QaProbeWindow = ProbeGlobal;
   const qaProbeEnabled =
     import.meta.env.DEV ||
     import.meta.env.VITE_QA_PROBE === '1' ||
@@ -112,7 +199,7 @@ export default function AdvancedCandleChart({
     }
   });
   const { enabled: probeEnabled } = useProbeToggle();
-  const { loading: prefsLoading, prefs, getTfPreset, setDefaultTf, setDefaultRange, updateTfPreset, setIndicatorStyles } = useChartPrefs();
+  const { loading: prefsLoading, prefs, getTfPreset, setDefaultTf, setDefaultRange, updateTfPreset } = useChartPrefs();
   const tf: TF = (timeframe as TF) ?? (prefs.default_timeframe ?? initialTf);
   const range: Range = prefs.default_range ?? initialRange;
   const preset = getTfPreset(tf);
@@ -154,6 +241,7 @@ export default function AdvancedCandleChart({
   const lastTimeSecRef = useRef<number | null>(null);
   const lastBarRef = useRef<ChartBar | null>(null);
   const seedBarsRef = useRef<ChartBar[]>([]);
+  const barStyleMapRef = useRef<Map<number, BarStyle>>(new Map());
   const econEventsRef = useRef<EconEvent[] | null>(null);
   const econMarkerCountRef = useRef(0);
   const calendarAbortRef = useRef<AbortController | null>(null);
@@ -164,10 +252,13 @@ export default function AdvancedCandleChart({
   const [econEventsLen, setEconEventsLen] = useState(0);
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const [seedBarsVersion, setSeedBarsVersion] = useState(0);
-  const logProbeEvent = (msg: string) => {
-    if (import.meta.env.DEV) console.debug('[chart]', msg);
-    setProbeState((prev) => ({ ...prev, lastEvent: msg }));
-  };
+  const logProbeEvent = useCallback(
+    (msg: string) => {
+      if (import.meta.env.DEV) console.debug('[chart]', msg);
+      setProbeState((prev) => ({ ...prev, lastEvent: msg }));
+    },
+    [],
+  );
   const lwcInfo = LWC as unknown as { version?: string; Version?: string };
   const lwcVersion = lwcInfo.version ?? lwcInfo.Version;
   const showProbe = import.meta.env.DEV && probeEnabled;
@@ -187,13 +278,18 @@ export default function AdvancedCandleChart({
     }
   }
 
-  const hist = useHistoricalBars(symbol, tf, range);
+  const interval = tfToInterval(tf, range);
+  const { candles, loading: candlesLoading } = useHookPrice(symbol, interval, range);
+  console.log('TF:', tf);
+  console.log('Fetching candles for:', symbol, interval, range);
+  console.log('Candles:', candles);
+  useHookQuote(symbol);
   const live = useLiveBars(symbol, tf, { enabled: !mockMode });
-  const bars = useMemo<ApiBar[]>(() => {
+  const groupedBars = useMemo<ApiBar[]>(() => {
     if (mockMode) {
       const synthetic = genMockBars({ minutes: rangeToMinutes(range), end: mockEnd, seed: mockSeed });
       return synthetic.map((bar) => ({
-        time: new Date(fromChartTimeValue(bar.time) * 1000).toISOString(),
+        time: new Date(fromChartTimeValue(bar.time, USING_TV) * 1000).toISOString(),
         open: bar.open,
         high: bar.high,
         low: bar.low,
@@ -201,17 +297,98 @@ export default function AdvancedCandleChart({
         volume: 0,
       }));
     }
-    return hist.data ?? [];
-  }, [hist.data, mockMode, mockEnd, mockSeed, range]);
+
+    if (!candles || candles.length === 0) return [];
+
+    const intervalMs = 15 * 60 * 1000; // 15m buckets by default
+    const groups = groupCandles(candles, intervalMs);
+
+    return groups.map((group) => {
+      const open = group[0].open;
+      const close = group[group.length - 1].close;
+      const high = Math.max(...group.map((c) => c.high));
+      const low = Math.min(...group.map((c) => c.low));
+      const time = group[0].time;
+
+      return { time, open, high, low, close, volume: 0 } satisfies ApiBar;
+    });
+  }, [candles, mockMode, mockEnd, mockSeed, range]);
+
+  const barConfidence = useMemo(() => {
+    if (!candles || groupedBars.length === 0) return [] as number[];
+
+    return groupedBars.map((bar) => {
+      const barStart = new Date(bar.time).getTime();
+      const barEnd = barStart + 15 * 60 * 1000;
+
+      const inBarCandles = candles.filter((c) => {
+        const t = new Date(c.time).getTime();
+        return t >= barStart && t < barEnd;
+      });
+
+      if (!inBarCandles.length) return 0;
+
+      let sameDir = 0;
+      let reversals = 0;
+      let lastDir: 'up' | 'down' | null = null;
+      const wickRatios: number[] = [];
+
+      for (const c of inBarCandles) {
+        const dir = c.close > c.open ? 'up' : c.close < c.open ? 'down' : 'flat';
+        if (dir === 'up' || dir === 'down') {
+          if (dir === lastDir) sameDir += 1;
+          if (lastDir && dir !== lastDir) reversals += 1;
+          lastDir = dir;
+        }
+        const wick = c.high - c.low;
+        const body = Math.abs(c.close - c.open) || 1;
+        wickRatios.push(wick / body);
+      }
+
+      const percentSame = sameDir / inBarCandles.length;
+      const avgWickRatio =
+        wickRatios.length > 0
+          ? wickRatios.reduce((a, b) => a + b, 0) / wickRatios.length
+          : 0;
+
+      let score = 100;
+      score *= percentSame;
+      score -= reversals * 5;
+      score -= avgWickRatio * 10;
+
+      return Math.max(0, Math.min(score, 100));
+    });
+  }, [candles, groupedBars]);
+
+  console.log('Grouped bars:', groupedBars.slice(0, 5));
+  console.log('Confidence scores:', barConfidence.slice(0, 5));
+
+  const bars = groupedBars;
+  const perBarStyles = useMemo(() => {
+    if (!bars.length) return new Map<number, BarStyle>();
+    const styles = new Map<number, BarStyle>();
+    for (let idx = 0; idx < bars.length; idx += 1) {
+      const bar = bars[idx];
+      const confidence = Math.max(0, Math.min(100, barConfidence[idx] ?? 0));
+      const sec = toSec(bar.time);
+      if (!Number.isFinite(sec)) continue;
+      const normalized = confidence / 100;
+      const alpha = CONFIDENCE_MIN_ALPHA + (CONFIDENCE_MAX_ALPHA - CONFIDENCE_MIN_ALPHA) * normalized;
+      const rgb = bar.close >= bar.open ? CONFIDENCE_UP_RGB : CONFIDENCE_DOWN_RGB;
+      const color = `rgba(${rgb}, ${alpha.toFixed(3)})`;
+      styles.set(sec, { color, wickColor: color, borderColor: color });
+    }
+    return styles;
+  }, [bars, barConfidence]);
   const liveBar = mockMode ? null : live.bar;
 
-  const isChartLoading = prefsLoading || (!mockMode && hist.isLoading);
+  const isChartLoading = prefsLoading || (!mockMode && candlesLoading);
   const auxPanelHeight = (preset.useMACD ? 180 : 0) + (preset.useRSI ? 140 : 0);
   const chartAreaHeight = Math.max(height - auxPanelHeight, 320);
   const lastVisibleRangeRef = useRef<{ from: number; to: number } | null>(null);
   const initialWindowSentRef = useRef(false);
   const rangeThrottleRef = useRef<number | null>(null);
-  const chartError = mockMode ? null : hist.error;
+  const chartError = mockMode ? null : null;
   const stageRef = useRef<BootStage>('none');
   const recordStage = useCallback(
     (stage: BootStage) => {
@@ -244,8 +421,9 @@ export default function AdvancedCandleChart({
     [symbol],
   );
 
-  useEffect(() => {
+  const startFpsTracker = useCallback(() => {
     const tracker = fpsTrackerRef.current;
+    if (!tracker) return () => {};
     let mounted = true;
     const loop = (ts: number) => {
       if (!mounted) return;
@@ -272,6 +450,13 @@ export default function AdvancedCandleChart({
       tracker.fps = 0;
     };
   }, []);
+
+  useEffect(() => {
+    const stop = startFpsTracker();
+    return () => {
+      stop();
+    };
+  }, [startFpsTracker]);
 
   useEffect(() => {
     if (!qaProbeEnabled) {
@@ -408,7 +593,8 @@ export default function AdvancedCandleChart({
         sessionBoundary,
       });
       const payload = ds.length ? ds : bars;
-      series.setData(mapBarsForChart(payload));
+      const styleMap = barStyleMapRef.current;
+      series.setData(mapBarsWithStylesForChart(payload, styleMap));
       pushWindowToWorker(targetRange, WORKER_VISIBLE_POINT_CAP);
       if (targetRange) initialWindowSentRef.current = true;
     },
@@ -437,10 +623,6 @@ export default function AdvancedCandleChart({
     }),
     [preset.kdjPeriod, preset.kdjKSmooth, preset.kdjDSmooth, preset.kdjSessionAnchored],
   );
-  const indicatorPanelInitials = useMemo(
-    () => ({ st: stPanelDefaults, bb: bbPanelDefaults, macd: macdPanelDefaults, vwap: vwapPanelDefaults, kdj: kdjPanelDefaults }),
-    [bbPanelDefaults, macdPanelDefaults, stPanelDefaults, vwapPanelDefaults, kdjPanelDefaults],
-  );
   const showKdjPane = indicatorToggles.KDJ;
 
   const [stylePrefs, setStylePrefs] = useState<IndicatorStylePrefs>(() => cloneIndicatorStylePrefs(prefs.styles));
@@ -460,104 +642,6 @@ export default function AdvancedCandleChart({
   );
 
   // --- styles → series application --------------------------------------------
-  const applyIndicatorStyles = useCallback(
-    (styles: IndicatorStylePrefs) => {
-      const effWidth = (override?: number) => clampLineWidth(override ?? styles.global.lineWidth ?? 2);
-
-      overlays.current.stai?.applyOptions({ lineWidth: effWidth(styles.perIndicator?.stAi?.lineWidth) });
-      overlays.current.ema?.applyOptions({ lineWidth: effWidth(styles.perIndicator?.ema?.lineWidth) });
-      overlays.current.vwap?.applyOptions({ lineWidth: effWidth(styles.perIndicator?.vwap?.lineWidth) });
-
-      const bbWidth = effWidth(styles.perIndicator?.bb?.lineWidth);
-      overlays.current.bbu?.applyOptions({ lineWidth: bbWidth });
-      overlays.current.bbm?.applyOptions({ lineWidth: bbWidth });
-      overlays.current.bbl?.applyOptions({ lineWidth: bbWidth });
-
-      rsiSeriesRef.current?.applyOptions({ lineWidth: effWidth(styles.perIndicator?.rsi?.lineWidth) });
-      macdLineRef.current?.applyOptions({ lineWidth: effWidth(styles.perIndicator?.macdLine?.lineWidth) });
-      macdSigRef.current?.applyOptions({ lineWidth: effWidth(styles.perIndicator?.macdSignal?.lineWidth) });
-
-      const histThickness = styles.perIndicator?.macdHist?.histThickness ?? styles.global.histThickness ?? 'normal';
-      if (macdChartRef.current) {
-        macdChartRef.current.timeScale().applyOptions({ barSpacing: MACD_SPACING_TARGETS[histThickness] });
-      }
-    },
-    [],
-  );
-
-  const handleStylePrefsChange = useCallback(
-    (next: IndicatorStylePrefs) => {
-      setStylePrefs(next);
-      setIndicatorStyles(next);
-      applyIndicatorStyles(next);
-    },
-    [setIndicatorStyles, applyIndicatorStyles],
-  );
-
-  useEffect(() => {
-    if (candleRef.current) {
-      applyIndicatorStyles(stylePrefs);
-    }
-  }, [applyIndicatorStyles, stylePrefs]);
-
-  const persistStParams = useCallback(
-    (params: Partial<StPerfParams>) => {
-      const patch: Partial<TfPreset> = {};
-      if (params.atrSpan !== undefined) patch.stPerfAtrSpan = params.atrSpan;
-      if (params.factorMin !== undefined) patch.stPerfMin = params.factorMin;
-      if (params.factorMax !== undefined) patch.stPerfMax = params.factorMax;
-      if (params.factorStep !== undefined) patch.stPerfStep = params.factorStep;
-      if (params.fromCluster !== undefined) patch.stPerfFrom = params.fromCluster;
-      if (params.useAMA !== undefined) patch.stPerfUseAMA = params.useAMA;
-      if (params.applyImmediateOnFlip !== undefined) patch.stPerfApplyImmediateOnFlip = params.applyImmediateOnFlip;
-      if (params.k !== undefined) patch.stPerfK = params.k;
-      if (Object.keys(patch).length) updateTfPreset(tf, patch);
-    },
-    [tf, updateTfPreset],
-  );
-
-  const persistBbParams = useCallback(
-    (params: Partial<{ period: number; mult: number }>) => {
-      const patch: Partial<TfPreset> = {};
-      if (params.period !== undefined) patch.bbPeriod = params.period;
-      if (params.mult !== undefined) patch.bbMult = params.mult;
-      if (Object.keys(patch).length) updateTfPreset(tf, patch);
-    },
-    [tf, updateTfPreset],
-  );
-
-  const persistMacdParams = useCallback(
-    (params: Partial<{ fast: number; slow: number; signal: number }>) => {
-      const patch: Partial<TfPreset> = {};
-      if (params.fast !== undefined) patch.macdFast = params.fast;
-      if (params.slow !== undefined) patch.macdSlow = params.slow;
-      if (params.signal !== undefined) patch.macdSignal = params.signal;
-      if (Object.keys(patch).length) updateTfPreset(tf, patch);
-    },
-    [tf, updateTfPreset],
-  );
-
-  const persistVwapParams = useCallback(
-    (params: Partial<{ mult: number }>) => {
-      const patch: Partial<TfPreset> = {};
-      if (params.mult !== undefined) patch.vwapMult = params.mult;
-      if (Object.keys(patch).length) updateTfPreset(tf, patch);
-    },
-    [tf, updateTfPreset],
-  );
-
-  const persistKdjParams = useCallback(
-    (params: Partial<KdjPanelParams>) => {
-      const patch: Partial<TfPreset> = {};
-      if (params.period !== undefined) patch.kdjPeriod = params.period;
-      if (params.kSmooth !== undefined) patch.kdjKSmooth = params.kSmooth;
-      if (params.dSmooth !== undefined) patch.kdjDSmooth = params.dSmooth;
-      if (params.sessionAnchored !== undefined) patch.kdjSessionAnchored = params.sessionAnchored;
-      if (Object.keys(patch).length) updateTfPreset(tf, patch);
-    },
-    [tf, updateTfPreset],
-  );
-
   const clearIndicatorSeries = useCallback((name: PanelIndicatorName) => {
     if (name === 'STAI') overlays.current.stai?.setData([]);
     if (name === 'EMA') overlays.current.ema?.setData([]);
@@ -589,74 +673,6 @@ export default function AdvancedCandleChart({
     econMarkerCountRef.current = 0;
     calendarSigRef.current = null;
   }, []);
-
-  const handleIndicatorToggle = useCallback(
-    (name: PanelIndicatorName, on: boolean) => {
-      if (name === 'Calendar') {
-        if (!env.CALENDAR_ENABLED) return;
-        updateTfPreset(tf, { useCalendar: on });
-        return;
-      }
-      if (name === 'KDJ') {
-        indicatorWorker.toggleKdj(on);
-        if (!on) clearIndicatorSeries('KDJ');
-        updateTfPreset(tf, { useKDJ: on });
-        return;
-      }
-      if (!isWorkerIndicator(name)) return;
-      indicatorWorker.toggle(name, on);
-      if (!on) clearIndicatorSeries(name);
-      const patch: Partial<TfPreset> = {};
-      if (name === 'STAI') patch.useSTPerf = on;
-      if (name === 'EMA') patch.useEMA = on;
-      if (name === 'RSI') patch.useRSI = on;
-      if (name === 'VWAP') patch.useVWAP = on;
-      if (name === 'BB') patch.useBB = on;
-      if (name === 'MACD') patch.useMACD = on;
-      if (Object.keys(patch).length) updateTfPreset(tf, patch);
-    },
-    [indicatorWorker, tf, updateTfPreset, clearIndicatorSeries],
-  );
-
-  const handleStParamChange = useCallback(
-    (params: Partial<StPerfParams>) => {
-      indicatorWorker.setStParams(params);
-      persistStParams(params);
-    },
-    [indicatorWorker, persistStParams],
-  );
-
-  const handleBbParamChange = useCallback(
-    (params: Partial<{ period: number; mult: number }>) => {
-      indicatorWorker.setBbParams(params);
-      persistBbParams(params);
-    },
-    [indicatorWorker, persistBbParams],
-  );
-
-  const handleMacdParamChange = useCallback(
-    (params: Partial<{ fast: number; slow: number; signal: number }>) => {
-      indicatorWorker.setMacdParams(params);
-      persistMacdParams(params);
-    },
-    [indicatorWorker, persistMacdParams],
-  );
-
-  const handleVwapParamChange = useCallback(
-    (params: Partial<{ mult: number }>) => {
-      indicatorWorker.setVwapParams(params);
-      persistVwapParams(params);
-    },
-    [indicatorWorker, persistVwapParams],
-  );
-
-  const handleKdjParamChange = useCallback(
-    (params: Partial<KdjPanelParams>) => {
-      indicatorWorker.setKdjParams(params);
-      persistKdjParams(params);
-    },
-    [indicatorWorker, persistKdjParams],
-  );
 
   useEffect(() => {
     indicatorWorker.setStParams(stPanelDefaults);
@@ -747,11 +763,10 @@ export default function AdvancedCandleChart({
           priceLineVisible: false,
         });
       }
-      const useIso = ov.points[0]?.ts?.includes?.('T');
       overlaySeriesRef.current[ov.id].setData(
         ov.points
           .filter((p) => Number.isFinite(p.y))
-          .map((p) => ({ time: (useIso ? (p.ts as Time) : (p.ts as any)), value: p.y })),
+          .map((p) => ({ time: toOverlayTime(p.ts), value: p.y })),
       );
     }
 
@@ -763,13 +778,13 @@ export default function AdvancedCandleChart({
     }
   }, [overlayProp]);
 
-  useLayoutEffect(() => {
+  const bootstrapCharts = useCallback(() => {
     const container = mainRef.current;
     if (!container) {
       console.warn('[chart] missing container');
       setProbeState((prev) => ({ ...prev, ok: false, error: 'no-container' }));
       logProbeEvent('no-container');
-      return;
+      return () => {};
     }
 
     if (qaProbeEnabled) recordStage('container-mounted');
@@ -888,10 +903,19 @@ export default function AdvancedCandleChart({
       logProbeEvent('init-error');
       return () => {};
     }
-  }, []);
+  }, [chartAreaHeight, logProbeEvent, preset.useMACD, preset.useRSI, qaProbeEnabled, recordStage, tf]);
+
+  useLayoutEffect(() => {
+    const cleanup = bootstrapCharts();
+    return () => {
+      cleanup?.();
+    };
+  }, [bootstrapCharts]);
 
   useEffect(() => {
     if (!bars.length || !candleRef.current) return;
+
+    barStyleMapRef.current = perBarStyles;
 
     if (import.meta.env.DEV) {
       const maybeNumericTime = bars[0]?.time as unknown;
@@ -958,6 +982,7 @@ export default function AdvancedCandleChart({
     applyVisibleDecimation,
     bars,
     indicatorWorker,
+    perBarStyles,
     pushWindowToWorker,
     qaProbeEnabled,
     recordStage,
@@ -1009,12 +1034,8 @@ export default function AdvancedCandleChart({
       setCalendarError(null);
       clearCalendarMarkers();
       try {
-        if (typeof window !== 'undefined') {
-          const w = window as any;
-          const metaRoot = (w.__probeMeta ??= {});
-          const meta = (metaRoot[symbol] ??= {});
-          meta.calendarReady = false;
-        }
+        const meta = ensureProbeMeta(symbol);
+        if (meta) meta.calendarReady = false;
       } catch {
         /* noop */
       }
@@ -1046,12 +1067,8 @@ export default function AdvancedCandleChart({
         }
         setEconEventsLen(events.length);
         try {
-          if (typeof window !== 'undefined') {
-            const w = window as any;
-            const metaRoot = (w.__probeMeta ??= {});
-            const meta = (metaRoot[symbol] ??= {});
-            meta.calendarReady = true;
-          }
+          const meta = ensureProbeMeta(symbol);
+          if (meta) meta.calendarReady = true;
         } catch {
           /* noop */
         }
@@ -1065,12 +1082,8 @@ export default function AdvancedCandleChart({
         clearCalendarMarkers();
         if (import.meta.env.DEV) console.warn('[calendar] fetch failed', err);
         try {
-          if (typeof window !== 'undefined') {
-            const w = window as any;
-            const metaRoot = (w.__probeMeta ??= {});
-            const meta = (metaRoot[symbol] ??= {});
-            meta.calendarReady = false;
-          }
+          const meta = ensureProbeMeta(symbol);
+          if (meta) meta.calendarReady = false;
         } catch {
           /* noop */
         }
@@ -1189,7 +1202,7 @@ export default function AdvancedCandleChart({
     shouldRedecimate = true;
 
     if (shouldRedecimate) applyVisibleDecimation(lastVisibleRangeRef.current);
-  }, [applyVisibleDecimation, indicatorWorker, liveBar, mockMode, preset, tf]);
+  }, [applyVisibleDecimation, indicatorWorker, liveBar, logProbeEvent, mockMode, preset, tf]);
 
   const getSeriesCount = useCallback(
     () =>
@@ -1211,26 +1224,10 @@ export default function AdvancedCandleChart({
   // QA probe (namespaced by symbol) available when __probeBoot is initialized
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    type ProbeRoot = Record<string, unknown>;
-    type ProbeMeta = {
-      chartReady?: boolean;
-      seriesReady?: boolean;
-      calendarEnabled?: boolean;
-      calendarReady?: boolean;
-    };
-    type ProbeGlobal = typeof window & {
-      __probe?: Record<string, ProbeRoot>;
-      __probeBoot?: {
-        mounted?: { symbol: string; ts: number }[];
-        unmounted?: { symbol: string; ts: number }[];
-        stages?: { stage: BootStage; ts: number }[];
-      };
-      __probeMeta?: Record<string, ProbeMeta>;
-    };
 
     const w = window as ProbeGlobal;
     if (!w.__probeBoot) return;
-    const root = (w.__probe ??= {});
+    const root = (w.__probe ??= {} as Record<string, ProbeRoot>);
     const entry = (root[symbol] ??= {} as ProbeRoot);
 
     // Ensure a meta entry exists so tests can use a stable readiness contract.
@@ -1430,7 +1427,7 @@ export default function AdvancedCandleChart({
         }
       }
     };
-  }, [getSeriesCount, setStylePrefs, symbol]);
+  }, [calendarEnabled, getSeriesCount, setStylePrefs, symbol, tf, updateTfPreset]);
 
   return (
     <div className="space-y-3">
@@ -1462,6 +1459,8 @@ export default function AdvancedCandleChart({
           Economic calendar unavailable: {calendarError}
         </div>
       )}
+
+      <div style={{ color: 'white' }}>Rendering {bars?.length ?? 0} bars</div>
 
       <div className="relative">
         <div
@@ -1530,23 +1529,9 @@ function updateIndicatorLastPoints(
 }
 
 const toCandle = (bar: ChartBar) => ({ ...bar, volume: bar.volume ?? 0 });
-export const fromChartTimeValue = (value: Time) => {
-  if (typeof value === 'number') {
-    return USING_TV ? Math.floor(value / 1000) : value;
-  }
-  if (typeof value === 'string') {
-    const [y, m, d] = value.split('-').map(Number);
-    const ts = Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1);
-    return Math.floor(ts / 1000);
-  }
-  const bd = value as BusinessDay;
-  const ts = Date.UTC(bd.year, (bd.month ?? 1) - 1, bd.day ?? 1);
-  return Math.floor(ts / 1000);
-};
-
 const toSecondsVisibleRange = (range: ChartTimeRange | null): { from: number; to: number } | null => {
   if (!range || range.from == null || range.to == null) return null;
-  return { from: fromChartTimeValue(range.from), to: fromChartTimeValue(range.to) };
+  return { from: fromChartTimeValue(range.from, USING_TV), to: fromChartTimeValue(range.to, USING_TV) };
 };
 
 const buildStPerfParams = (preset: TfPreset): StPerfParams => ({
@@ -1574,7 +1559,12 @@ const formatBarForChart = (bar: ChartBar): CandlestickData<Time> => ({
   low: bar.low,
   close: bar.close,
 });
-const mapBarsForChart = (bars: ChartBar[]): CandlestickData<Time>[] => bars.map((b) => formatBarForChart(b));
+const mapBarsWithStylesForChart = (bars: ChartBar[], styles: Map<number, BarStyle>): CandlestickData<Time>[] =>
+  bars.map((bar) => {
+    const base = formatBarForChart(bar);
+    const style = styles.get(bar.time);
+    return style ? { ...base, ...style } : base;
+  });
 const formatPointForChart = <T extends { time: number }>(point: T): T & { time: Time } =>
   ({ ...point, time: toChartTime(point.time) } as T & { time: Time });
 const mapPointsForChart = <T extends { time: number }>(pts: T[]): (T & { time: Time })[] =>

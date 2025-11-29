@@ -1,14 +1,29 @@
-import React, { useMemo, useState } from 'react';
+import type { ChangeEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { createAlert, type AlertCondition, type TF } from '@/lib/apiAlerts';
 
+type AlertType = AlertCondition['type'];
+type KdjDirection = Extract<AlertCondition, { type: 'kdj_cross' }>['when'];
+
+const ALERT_TYPES: AlertType[] = ['kdj_cross', 'bb_squeeze', 'supertrend_flip'];
+const TF_OPTIONS: TF[] = ['10m', '1h', '4h', '1d'];
+
+const isAlertType = (value: string): value is AlertType =>
+  ALERT_TYPES.includes(value as AlertType);
+
+const isTfOption = (value: string): value is TF => TF_OPTIONS.includes(value as TF);
+
+const isKdjDirection = (value: string): value is KdjDirection =>
+  value === 'J_crosses_D' || value === 'J_crosses_below_D';
+
 export default function AlertBuilder() {
   const [ticker, setTicker] = useState('AAPL');
-  const [type, setType] = useState<'kdj_cross' | 'bb_squeeze' | 'supertrend_flip'>('kdj_cross');
+  const [type, setType] = useState<AlertType>('kdj_cross');
   const [tf, setTf] = useState<TF>('1h');
 
-  const [when, setWhen] = useState<'J_crosses_D' | 'J_crosses_below_D'>('J_crosses_D');
+  const [when, setWhen] = useState<KdjDirection>('J_crosses_D');
   const [n, setN] = useState(9);
   const [m, setM] = useState(3);
   const [l, setL] = useState(3);
@@ -36,12 +51,37 @@ export default function AlertBuilder() {
 
   const [status, setStatus] = useState('');
 
+  const handleTickerChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setTicker(event.target.value.toUpperCase());
+  };
+
+  const handleTypeChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const { value } = event.target;
+    if (isAlertType(value)) {
+      setType(value);
+    }
+  };
+
+  const handleTfChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const { value } = event.target;
+    if (isTfOption(value)) {
+      setTf(value);
+    }
+  };
+
+  const handleWhenChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const { value } = event.target;
+    if (isKdjDirection(value)) {
+      setWhen(value);
+    }
+  };
+
   async function onCreate() {
     try {
       await createAlert({ ticker, condition: cond, active: true });
       setStatus('Alert saved');
-    } catch (e: any) {
-      setStatus(e?.message ?? String(e));
+    } catch (e: unknown) {
+      setStatus(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -53,13 +93,13 @@ export default function AlertBuilder() {
           aria-label="Alert symbol"
           className="w-28"
           value={ticker}
-          onChange={(e) => setTicker(e.target.value.toUpperCase())}
+          onChange={handleTickerChange}
         />
         <select
           aria-label="Alert type"
           className="w-40 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm"
           value={type}
-          onChange={(e) => setType(e.target.value as any)}
+          onChange={handleTypeChange}
         >
           <option value="kdj_cross">KDJ cross</option>
           <option value="bb_squeeze">BB squeeze</option>
@@ -69,7 +109,7 @@ export default function AlertBuilder() {
           aria-label="Alert timeframe"
           className="w-28 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm"
           value={tf}
-          onChange={(e) => setTf(e.target.value as TF)}
+          onChange={handleTfChange}
         >
           <option value="10m">10m</option>
           <option value="1h">1h</option>
@@ -84,7 +124,7 @@ export default function AlertBuilder() {
             aria-label="KDJ cross direction"
             className="w-56 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm"
             value={when}
-            onChange={(e) => setWhen(e.target.value as any)}
+            onChange={handleWhenChange}
           >
             <option value="J_crosses_D">J crosses ABOVE D</option>
             <option value="J_crosses_below_D">J crosses BELOW D</option>

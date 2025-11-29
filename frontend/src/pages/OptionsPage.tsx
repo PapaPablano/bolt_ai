@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from 'react';
 import { supabase } from '../lib/supabaseClient';
 import Tooltip from '@/components/ui/Tooltip';
 import { GradeBadge } from '@/components/options/GradeBadge';
@@ -70,6 +78,19 @@ const COL_HINTS: Record<string, string> = {
   ivp: 'IV Percentile vs recent IV history.',
   oi: 'Open interest (open contracts).',
   vol: 'Today’s traded volume.',
+};
+
+type StockSearchPayload = {
+  ok?: boolean;
+  error?: string;
+  results?: { symbol?: string }[];
+};
+
+type RankPayload = {
+  ok?: boolean;
+  error?: string;
+  results?: RankedRow[];
+  debug?: RankDebug;
 };
 
 function useSymbolSearch(query: string) {
@@ -201,9 +222,9 @@ async function warmOptionData(symbol: string): Promise<string | null> {
 
   // 1) resolve canonical via stock-search (keeps UX happy even if user typed alias)
   const r0 = await api(`/api/stock-search?q=${encodeURIComponent(sym)}&limit=1`);
-  const j0 = await jsonOrText(r0);
+  const j0 = (await jsonOrText(r0)) as StockSearchPayload;
   if (!j0?.ok) throw new Error(j0?.error || 'Symbol lookup failed');
-  const canonical = (j0 as any)?.results?.[0]?.symbol || sym;
+  const canonical = j0.results?.[0]?.symbol || sym;
 
   // 2) prime instruments (provider catalog)
   await ensureOk(
@@ -324,7 +345,7 @@ export function OptionsPanel() {
   const handleRank = useCallback(async () => {
     const upper = symbol.trim().toUpperCase();
 
-    async function fetchRank() {
+    async function fetchRank(): Promise<RankPayload> {
       const qs = new URLSearchParams({
         symbol: upper,
         side,
@@ -336,7 +357,7 @@ export function OptionsPanel() {
         staleMaxMin: marketOpen ? '60' : String(3 * 24 * 60),
       }).toString();
       const res = await api(`/api/options-rank?${qs}`);
-      return await jsonOrText(res);
+      return (await jsonOrText(res)) as RankPayload;
     }
 
     const warmOnce = async (force = false) => {
@@ -380,7 +401,7 @@ export function OptionsPanel() {
       // warm once per symbol (covers "type + click Rank" path)
       await warmOnce();
 
-      let payload: any = await fetchRank();
+      let payload = await fetchRank();
 
       // safety net: warm + retry if backend still complains
       const unknownRe = /(unknown|not\s*found|no\s*chain)/i;
@@ -392,11 +413,12 @@ export function OptionsPanel() {
 
       if (!payload.ok) throw new Error(payload.error || 'Rank failed');
 
-      setRows((payload.results ?? []) as RankedRow[]);
-      setDebug((payload.debug as RankDebug) || null);
-    } catch (e: any) {
+      setRows(payload.results ?? []);
+      setDebug(payload.debug || null);
+    } catch (error) {
       setRows([]);
-      setErr(e?.message ?? String(e));
+      const message = error instanceof Error ? error.message : String(error);
+      setErr(message);
       setDebug(null);
     } finally {
       setLoading(false);
@@ -455,6 +477,56 @@ export function OptionsPanel() {
     return `${quoteAgeMinutes}m old`;
   }, [quoteAgeMinutes]);
 
+  const handleSymInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setSymInput(event.target.value);
+    setComboOpen(true);
+  };
+
+  const handleSymInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown' && symHits.length > 0) {
+      event.preventDefault();
+      setComboOpen(true);
+      setHighlight((i) => {
+        const next = i + 1;
+        return next >= symHits.length ? symHits.length - 1 : next;
+      });
+      return;
+    }
+    if (event.key === 'ArrowUp' && symHits.length > 0) {
+      event.preventDefault();
+      setComboOpen(true);
+      setHighlight((i) => {
+        const next = i - 1;
+        return next < 0 ? 0 : next;
+      });
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (highlight >= 0 && highlight < symHits.length) {
+        const h = symHits[highlight];
+        setSymInput(h.symbol);
+        setComboOpen(false);
+        (async () => {
+          setStatus(
+            marketOpen
+              ? 'Warming option chain…'
+              : 'Market closed – warming latest chain…',
+          );
+          const canon = await warmOptionData(h.symbol);
+          lastWarmedRef.current = canon ?? h.symbol;
+          if (!marketOpen) {
+            await new Promise((r) => setTimeout(r, 500));
+          }
+          setStatus(null);
+          handleRank();
+        })();
+      } else {
+        handleRank();
+      }
+    }
+  };
+
   return (
     <div className="space-y-4">
       <h2
@@ -478,58 +550,12 @@ export function OptionsPanel() {
                 className:
                   'w-[220px] rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm',
                 value: symInput,
-                onChange: (e: any) => {
-                  setSymInput(e.target.value);
-                  setComboOpen(true);
-                },
+                onChange: handleSymInputChange,
                 onFocus: () => setComboOpen(true),
                 onBlur: () => {
                   window.setTimeout(() => setComboOpen(false), 120);
                 },
-                onKeyDown: (e: any) => {
-                  if (e.key === 'ArrowDown' && symHits.length > 0) {
-                    e.preventDefault();
-                    setComboOpen(true);
-                    setHighlight((i) => {
-                      const next = i + 1;
-                      return next >= symHits.length ? symHits.length - 1 : next;
-                    });
-                    return;
-                  }
-                  if (e.key === 'ArrowUp' && symHits.length > 0) {
-                    e.preventDefault();
-                    setComboOpen(true);
-                    setHighlight((i) => {
-                      const next = i - 1;
-                      return next < 0 ? 0 : next;
-                    });
-                    return;
-                  }
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (highlight >= 0 && highlight < symHits.length) {
-                      const h = symHits[highlight];
-                      setSymInput(h.symbol);
-                      setComboOpen(false);
-                      (async () => {
-                        setStatus(
-                          marketOpen
-                            ? 'Warming option chain…'
-                            : 'Market closed – warming latest chain…',
-                        );
-                        const canon = await warmOptionData(h.symbol);
-                        lastWarmedRef.current = canon ?? h.symbol;
-                        if (!marketOpen) {
-                          await new Promise((r) => setTimeout(r, 500));
-                        }
-                        setStatus(null);
-                        handleRank();
-                      })();
-                    } else {
-                      handleRank();
-                    }
-                  }
-                },
+                onKeyDown: handleSymInputKeyDown,
               };
 
               return comboOpen ? (
@@ -937,6 +963,23 @@ type Watchlist = {
   updated_at?: string;
 };
 
+type WatchlistResponse = {
+  ok: boolean;
+  error?: string;
+  lists?: Watchlist[];
+};
+
+type WatchlistCreateResponse = {
+  ok: boolean;
+  error?: string;
+  list: Watchlist;
+};
+
+type AppendItemsResponse = {
+  ok: boolean;
+  error?: string;
+};
+
 function SaveWatchlistForm({
   selected,
   onSaved,
@@ -977,13 +1020,16 @@ function SaveWatchlistForm({
         return;
       }
       const ct = res.headers.get('content-type') || '';
-      const payload = ct.includes('application/json') ? await res.json() : null;
+      const payload: WatchlistResponse | null = ct.includes('application/json')
+        ? await res.json()
+        : null;
       if (!payload?.ok) throw new Error(payload?.error || 'Failed to load watchlists');
-      const arr: Watchlist[] = payload.lists ?? [];
+      const arr = payload.lists ?? [];
       setLists(arr);
       if (!listId && arr.length) setListId(arr[0].id);
-    } catch (e: any) {
-      setErr(e?.message ?? String(e));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setErr(message);
     } finally {
       setLoadingLists(false);
     }
@@ -1003,7 +1049,7 @@ function SaveWatchlistForm({
       },
       body: JSON.stringify({ contract_ids: selected }),
     });
-    const j2 = await r2.json();
+    const j2: AppendItemsResponse = await r2.json();
     if (!j2.ok) throw new Error(j2.error || 'Failed to add items');
   };
 
@@ -1042,7 +1088,7 @@ function SaveWatchlistForm({
         setErr('Sign in to create option watchlists.');
         return;
       }
-      const j1 = await r1.json();
+      const j1: WatchlistCreateResponse = await r1.json();
       if (!j1.ok) throw new Error(j1.error || 'Failed to create list');
 
       const createdId: string = j1.list.id;
@@ -1054,8 +1100,9 @@ function SaveWatchlistForm({
       setName('');
 
       onSaved?.();
-    } catch (e: any) {
-      setErr(e?.message ?? String(e));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setErr(message);
     } finally {
       setBusy(false);
     }

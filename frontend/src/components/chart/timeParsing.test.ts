@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { BusinessDay } from 'lightweight-charts';
-import { fromChartTimeValue } from './AdvancedCandleChart';
+import { fromChartTimeValue } from '../../utils/timeUtils';
 
 describe('fromChartTimeValue', () => {
   it('parses yyyy-mm-dd strings to seconds UTC', () => {

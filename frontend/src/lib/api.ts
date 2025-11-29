@@ -7,19 +7,51 @@ export type SearchHit = {
   exchange?: string;
 };
 
-export async function jsonOrText(res: Response) {
+export type ApiPayload = {
+  ok: boolean;
+  error?: string;
+} & Record<string, unknown>;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const getString = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+
+const toSearchHit = (raw: unknown): SearchHit | null => {
+  if (!isRecord(raw)) return null;
+
+  const symbol = getString(raw.symbol) ?? getString(raw.ticker);
+  if (!symbol) return null;
+
+  const name = getString(raw.name) ?? getString(raw.companyName) ?? getString(raw.description);
+  const exchange = getString(raw.exchange) ?? getString(raw.primaryExchange);
+
+  return {
+    symbol,
+    ...(name ? { name } : {}),
+    ...(exchange ? { exchange } : {}),
+  } satisfies SearchHit;
+};
+
+export async function jsonOrText(res: Response): Promise<ApiPayload> {
   const ct = res.headers.get('content-type') || '';
 
   if (ct.includes('application/json')) {
-    let data: any = null;
+    let data: unknown = null;
     try {
       data = await res.json();
     } catch {
       return { ok: res.ok, error: 'Invalid JSON response' };
     }
 
-    const baseOk = data && typeof data === 'object' && 'ok' in data ? (data as any).ok : undefined;
-    return { ok: baseOk ?? res.ok, ...(data ?? {}) };
+    if (isRecord(data)) {
+      const baseOk = 'ok' in data ? data.ok : undefined;
+      const okValue = typeof baseOk === 'boolean' ? baseOk : res.ok;
+      return { ok: okValue, ...data };
+    }
+
+    return { ok: res.ok, data };
   }
 
   return { ok: res.ok, error: await res.text() };
@@ -31,7 +63,7 @@ export async function jsonOrText(res: Response) {
  * - If VITE_EDGE_BASE_URL is set, "/api/foo" → "<BASE>/foo".
  */
 export function edgeUrl(pathAndQuery: string) {
-  const base = (import.meta as any)?.env?.VITE_EDGE_BASE_URL as string | undefined;
+  const base = import.meta.env?.VITE_EDGE_BASE_URL as string | undefined;
   if (!base) return pathAndQuery;
   return `${base}${pathAndQuery.replace(/^\/api/, '')}`;
 }
@@ -61,15 +93,18 @@ export async function fetchStockSearch(
     return [];
   }
 
-  const hits = (payload.results ?? []).map((r: any) => ({
-    symbol: r.symbol ?? r.ticker ?? '',
-    name: r.name ?? r.companyName ?? r.description ?? '',
-    exchange: r.exchange ?? r.primaryExchange ?? '',
-  })) as SearchHit[];
+  const rawResults = Array.isArray(payload.results)
+    ? payload.results
+    : Array.isArray(payload.data)
+      ? payload.data
+      : [];
 
-  const cleaned = hits.filter((h) => h.symbol);
-  _searchCache.set(key, { ts: Date.now(), hits: cleaned });
-  return cleaned;
+  const hits = rawResults
+    .map((result) => toSearchHit(result))
+    .filter((hit): hit is SearchHit => Boolean(hit));
+
+  _searchCache.set(key, { ts: Date.now(), hits });
+  return hits;
 }
 
 export async function fetchHistoricalData(
@@ -126,7 +161,7 @@ export async function fetchQuote(symbol: string, opts: { signal?: AbortSignal } 
   const ct = res.headers.get('content-type') || '';
   const rawText = await res.text();
 
-  let parsed: any = rawText;
+  let parsed: unknown = rawText;
   if (ct.includes('application/json')) {
     try {
       parsed = JSON.parse(rawText);
@@ -136,16 +171,22 @@ export async function fetchQuote(symbol: string, opts: { signal?: AbortSignal } 
   }
 
   if (!res.ok) {
-    const message =
-      (parsed && (parsed.error || parsed.message)) ||
-      rawText ||
-      res.statusText ||
-      'quote failed';
+    let message = rawText || res.statusText || 'quote failed';
+    if (isRecord(parsed)) {
+      const parsedMessage = getString(parsed.error) ?? getString(parsed.message);
+      if (parsedMessage) {
+        message = parsedMessage;
+      }
+    }
     throw new Error(message);
   }
 
-  const payload = parsed;
-  return payload.data ?? payload.quote ?? payload;
+  if (isRecord(parsed)) {
+    const data = parsed.data ?? parsed.quote ?? parsed;
+    return data;
+  }
+
+  return parsed;
 }
 
 // Compat types for legacy imports from '../lib/api'

@@ -3,7 +3,7 @@ declare namespace JSX {
   interface IntrinsicAttributes {
     inert?: boolean | '' | 'true' | 'false';
   }
-  interface HTMLAttributes<T> {
+  interface HTMLAttributes {
     inert?: boolean | '' | 'true' | 'false';
   }
 }

@@ -100,8 +100,11 @@ export function makeSessionResolver(calendar?: TradingCalendar) {
       const parsed = Date.parse(input);
       if (Number.isFinite(parsed)) return parsed;
     }
-    // last-ditch: try valueOf, then Number()
-    const n = Number((input as any)?.valueOf?.() ?? input);
+
+    type ValueOfCapable = { valueOf?: () => unknown };
+    const candidateValue = (input as ValueOfCapable)?.valueOf?.();
+    const candidate = typeof candidateValue === 'number' ? candidateValue : candidateValue ?? input;
+    const n = Number(candidate);
     return Number.isFinite(n) ? n : NaN;
   }
 
