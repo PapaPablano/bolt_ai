@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useMemo, useState, lazy } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { GitCompare } from 'lucide-react';
 import { StockCard } from '../components/StockCard';
 import { NewsPanel } from '../components/NewsPanel';
@@ -13,6 +14,7 @@ import { InternalLink } from '../components/InternalLink';
 const AdvancedCandleChart = lazy(() => import('../components/AdvancedCandleChart'));
 import { useHistoricalBars } from '@/hooks/useHistoricalBars';
 import { useChartPrefs } from '@/hooks/useChartPrefs';
+import type { AppOutletContext } from '../App';
 
 const DEFAULT_SYMBOLS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA'];
 
@@ -25,12 +27,8 @@ const STOCK_DETAILS: Record<string, { name: string; sector: string }> = {
   NVDA: { name: 'NVIDIA Corporation', sector: 'Technology' }
 };
 
-interface DashboardPageProps {
-  selectedSymbol: string;
-  onSymbolChange: (symbol: string, options?: { navigate?: boolean }) => void;
-}
-
-export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageProps) {
+export function DashboardPage() {
+  const { selectedSymbol, handleSymbolChange } = useOutletContext<AppOutletContext>();
   const [quotes, setQuotes] = useState<Record<string, StockQuote>>({});
   const [chartData, setChartData] = useState<BarData[]>([]);
   const [isLoadingChart, setIsLoadingChart] = useState(false);
@@ -63,8 +61,10 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
       const results = await Promise.all(quotePromises);
       const quotesMap: Record<string, StockQuote> = {};
       results.forEach((result) => {
-        if (result) {
-          quotesMap[result[0]] = result[1];
+        if (!result) return;
+        const [symbol, quote] = result;
+        if (quote && typeof quote === 'object') {
+          quotesMap[symbol] = quote as StockQuote;
         }
       });
 
@@ -77,12 +77,12 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
   }, []);
 
   useEffect(() => {
-    if (histBars) {
-      setChartData(histBars);
+    if (Array.isArray(histBars)) {
+      setChartData(histBars as BarData[]);
       setIsLoadingChart(false);
-    } else {
-      setIsLoadingChart(barsLoading || prefsLoading);
+      return;
     }
+    setIsLoadingChart(barsLoading || prefsLoading);
   }, [histBars, barsLoading, prefsLoading]);
 
   const currentDetails = useMemo(
@@ -98,7 +98,7 @@ export function DashboardPage({ selectedSymbol, onSymbolChange }: DashboardPageP
   }, [selectedSymbol, quotes, currentDetails.name]);
 
   const handleSymbolSelect = (symbol: string) => {
-    onSymbolChange(symbol, { navigate: true });
+    handleSymbolChange(symbol, { navigate: true });
     announce(`Selected ${symbol}. Loading chart data.`, 'polite');
   };
 

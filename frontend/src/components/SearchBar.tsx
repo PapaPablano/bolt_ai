@@ -16,15 +16,15 @@ export function SearchBar({ onSelectSymbol }: SearchBarProps) {
   const [highlightIndex, setHighlightIndex] = useState(-1);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const isExpanded = showResults && results.length > 0;
-  const ariaExpandedValue = isExpanded ? 'true' : 'false';
 
   useEffect(() => {
     const q = query.trim();
-    if (!q) {
+    if (q.length < 2) {
       setResults([]);
       setErr(null);
       setShowResults(false);
       setHighlightIndex(-1);
+      setLoading(false);
       return;
     }
 
@@ -129,7 +129,7 @@ export function SearchBar({ onSelectSymbol }: SearchBarProps) {
           className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           aria-controls="search-results"
           aria-autocomplete="list"
-          aria-expanded={ariaExpandedValue}
+          aria-expanded={isExpanded}
           aria-haspopup="listbox"
           role="combobox"
         />
@@ -156,7 +156,6 @@ export function SearchBar({ onSelectSymbol }: SearchBarProps) {
         >
           {results.map((result, idx) => {
             const isHighlighted = idx === highlightIndex;
-            const ariaSelectedValue = isHighlighted ? 'true' : 'false';
             return (
               <button
                 id={`search-result-${idx}`}
@@ -166,7 +165,7 @@ export function SearchBar({ onSelectSymbol }: SearchBarProps) {
                   handleSelect(result.symbol);
                 }}
                 role="option"
-                aria-selected={ariaSelectedValue}
+                aria-selected={isHighlighted}
                 className={`w-full px-4 py-3 text-left transition-colors border-b border-slate-700 last:border-b-0 ${
                   isHighlighted ? 'bg-slate-700' : 'hover:bg-slate-700'
                 }`}

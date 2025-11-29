@@ -1460,7 +1460,7 @@ export default function AdvancedCandleChart({
         </div>
       )}
 
-      <div style={{ color: 'white' }}>Rendering {bars?.length ?? 0} bars</div>
+      <div className="text-white">Rendering {bars?.length ?? 0} bars</div>
 
       <div className="relative">
         <div

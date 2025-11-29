@@ -10,7 +10,6 @@ interface OptionsDockProps {
 export default function OptionsDock({ triggerRef }: OptionsDockProps) {
   const { open, setOpen } = useOptionsDock();
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const ariaHiddenValue = open ? 'false' : 'true';
 
   useEffect(() => {
     const el = rootRef.current;
@@ -49,7 +48,7 @@ export default function OptionsDock({ triggerRef }: OptionsDockProps) {
         role="dialog"
         aria-modal="false"
         aria-labelledby="options-dock-title"
-        aria-hidden={ariaHiddenValue}
+        aria-hidden={!open}
         tabIndex={-1}
         ref={rootRef}
         onKeyDown={(e) => {

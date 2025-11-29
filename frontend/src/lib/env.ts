@@ -7,4 +7,5 @@ export const env = {
   defaultRange: (import.meta.env.VITE_DEFAULT_RANGE as string) || '6M',
   // Optional WS proxy that handles provider auth server-side.
   ohlcWsUrl: (import.meta.env.VITE_STREAM_WS_URL as string) || (import.meta.env.VITE_ALPACA_WS_URL as string) || '',
+  alpacaWsUrl: (import.meta.env.VITE_ALPACA_WS_URL as string) || '',
 };
