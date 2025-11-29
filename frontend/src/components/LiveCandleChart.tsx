@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { CandlestickSeries, createChart } from 'lightweight-charts';
-import type { ISeriesApi } from 'lightweight-charts';
+import { createChart } from 'lightweight-charts';
+import type { CandlestickData, ISeriesApi, Time, UTCTimestamp } from 'lightweight-charts';
 import { useHistoricalBars } from '@/hooks/useHistoricalBars';
 import { useLiveBars } from '@/hooks/useLiveBars';
 import type { Bar } from '@/types/bars';
@@ -12,8 +12,8 @@ type Props = {
   height?: number;
 };
 
-const toPoint = (bar: Bar) => ({
-  time: Math.floor(new Date(bar.time).getTime() / 1000),
+const toPoint = (bar: Bar): CandlestickData<Time> => ({
+  time: Math.floor(new Date(bar.time).getTime() / 1000) as UTCTimestamp,
   open: bar.open,
   high: bar.high,
   low: bar.low,
@@ -43,7 +43,7 @@ export function LiveCandleChart({
         textColor: '#cbd5e1',
       },
     });
-    const series = chart.addSeries(CandlestickSeries, {
+    const series = chart.addCandlestickSeries({
       upColor: '#22c55e',
       downColor: '#ef4444',
       borderUpColor: '#22c55e',
@@ -67,7 +67,7 @@ export function LiveCandleChart({
   }, [height, timeframe]);
 
   useEffect(() => {
-    if (!seriesRef.current || !history) return;
+    if (!seriesRef.current || !Array.isArray(history)) return;
     seriesRef.current.setData(history.map(toPoint));
   }, [history]);
 
@@ -79,7 +79,7 @@ export function LiveCandleChart({
   if (isLoading) return <div className="text-slate-400">Loading chart…</div>;
   if (error) return <div className="text-red-400">Failed to load history.</div>;
 
-  return <div ref={containerRef} style={{ width: '100%', height }} />;
+  return <div ref={containerRef} className="w-full h-[420px]" />;
 }
 
 export default LiveCandleChart;
